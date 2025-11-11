@@ -1,1 +1,5 @@
+git add uploads
+git commit -m "Add uploads folder"
+git push
+
 
