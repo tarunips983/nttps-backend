@@ -11,7 +11,7 @@ const jwt = require("jsonwebtoken");
 const nodemailer = require("nodemailer");
 
 const app = express();
-const PORT = 3000;
+
 
 // ✅ CORS
 app.use(cors({
@@ -312,10 +312,14 @@ app.use(express.static(__dirname, { extensions: ["html"] }));
 // =================================================================
 // ✅ START SERVER
 // =================================================================
+
+// =================================================================
+// ✅ START SERVER (Render-compatible)
+// =================================================================
+
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
     console.log(`✅ Server running on port ${PORT}`);
 });
-
 
