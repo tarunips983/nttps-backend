@@ -29,8 +29,8 @@ const dailyFile = path.join(__dirname, "daily.json");
 if (!fs.existsSync(uploadsFolder)) fs.mkdirSync(uploadsFolder);
 
 // ✅ Email Setup
-const EMAIL_USER = "tmcamotp@gmail.com";
-const EMAIL_PASS = "myve tejj ucgt ikbo";
+const EMAIL_USER = process.env.EMAIL_USER;
+const EMAIL_PASS = process.env.EMAIL_PASS;
 
 const transporter = nodemailer.createTransport({
     host: "smtp.gmail.com",
@@ -329,5 +329,6 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
