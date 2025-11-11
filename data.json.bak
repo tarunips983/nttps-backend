@@ -1,0 +1,101 @@
+[
+  {
+    "id": 1762230752111,
+    "workName": "Indent for Procurement of Hydraulic Cylinders (HPCV, HPSV, IPCV, IPSV & OLV Actuators) in Main Turbine ",
+    "prNo": "1000056788",
+    "subDivision": "Sub Div-I",
+    "recordType": "PR",
+    "amount": "75000000",
+    "sendTo": "At purchase-II",
+    "pdfPath": "/uploads/1762230751523-pr.pdf",
+    "isDeleted": false
+  },
+  {
+    "id": 1762230853115,
+    "workName": "Indent for the Procurement of 3-Way Temperature Regulators # DN50 for H# Seal Oil System & DN65 with Manual Override, PN16, EN-GJS-400 Body, Make: AKO, for the Main Turbine",
+    "prNo": "1000054965",
+    "subDivision": "Sub Div-I",
+    "recordType": "PR",
+    "amount": "1300000",
+    "sendTo": "CE/O&M",
+    "pdfPath": "/uploads/1762230852934-Pr.pdf",
+    "isDeleted": false
+  },
+  {
+    "id": 1762230943408,
+    "workName": "Indent for procurement of Servo Prime 46 Lubricant for Main Turbine of Dr.NTTPS, 800MW unit of stage-V",
+    "prNo": "1000056654",
+    "subDivision": "Sub Div-I",
+    "recordType": "PR",
+    "amount": "2587032",
+    "sendTo": "CE/O&M",
+    "pdfPath": "/uploads/1762230943246-1000056654.pdf",
+    "isDeleted": false
+  },
+  {
+    "id": 1762232201761,
+    "workName": "Indent for procurement of Reo lube Turbo fluid 46B for Main Turbine",
+    "prNo": "1000056037",
+    "subDivision": "Sub Div-I",
+    "recordType": "PR",
+    "amount": "2381539",
+    "sendTo": "CE/O&M",
+    "pdfPath": "/uploads/1762232201302-1000056037.pdf",
+    "isDeleted": false
+  },
+  {
+    "id": 1762232324389,
+    "workName": "Indent for Procurement of Pedestal Fan, Make: Almonard 24\" and 30\" in Main Turbine",
+    "prNo": "1000055803",
+    "subDivision": "Sub Div-I",
+    "recordType": "PR",
+    "amount": "98000",
+    "sendTo": "At purchase-I",
+    "pdfPath": "/uploads/1762232324237-1000055803.pdf",
+    "isDeleted": false
+  },
+  {
+    "id": 1762232390744,
+    "workName": "Indent for Procurement of Cylindrical U-Foam Sponge Condenser Cleaning balls, 3MM in length for Main Turbine",
+    "prNo": "1000055329",
+    "subDivision": "Sub Div-I",
+    "recordType": "PR",
+    "amount": "254100",
+    "sendTo": "CE/O&M",
+    "pdfPath": "/uploads/1762232389944-pr.pdf",
+    "isDeleted": false
+  },
+  {
+    "id": 1762232505752,
+    "workName": "Indent for the Procurement of Walk-Behind Electrically Operated Automatic Scrubber Drier Machine, Scrubbing for the Main Turbine",
+    "prNo": "1000055042",
+    "subDivision": "Sub Div-I",
+    "recordType": "PR",
+    "amount": "400000",
+    "sendTo": "At purchase-II",
+    "pdfPath": "/uploads/1762232505325-pr.pdf",
+    "isDeleted": false
+  },
+  {
+    "id": 1762232681236,
+    "workName": "Indent for the Procurement of Strainers for Vacuum Pump ACW water, Make: ACME, for the Main Turbine",
+    "prNo": "1000054623",
+    "subDivision": "Sub Div-I",
+    "recordType": "PR",
+    "amount": "100000",
+    "sendTo": "CE/O&M",
+    "pdfPath": "/uploads/1762232680356-1000054623.pdf",
+    "isDeleted": false
+  },
+  {
+    "id": 1762232742759,
+    "workName": "Indent for Procurement of Hydraulic Accumulators, Valve Blocks, and Safety Shut-off Systems for Turbine maintenance",
+    "prNo": "1000055081",
+    "subDivision": "Sub Div-I",
+    "recordType": "PR",
+    "amount": "1470000",
+    "sendTo": "At purchase-II",
+    "pdfPath": "/uploads/1762232742317-pr.pdf",
+    "isDeleted": false
+  }
+]

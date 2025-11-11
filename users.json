@@ -1,0 +1,38 @@
+[
+  {
+    "username": "admin",
+    "passwordHash": "$2b$10$WWA7OlZidfqBf7TICU./9eFvoYifnkKhP8UZHHBJHR5LbbLyn3gSi"
+  },
+  {
+    "username": "nttps",
+    "passwordHash": "$2b$10$SV5i9wC.PtwJaOV0oF8I7eas4DNQhk7UkZdmMohQjYRTgv9IQ/PHK"
+  },
+  {
+    "username": "tarun",
+    "passwordHash": "$2b$10$tboD4GkeHGo/jW0sqvKg.ebpCr.XfF9zuI12r1r/exHzDNu.Tj51u"
+  },
+  {
+    "username": "1234",
+    "passwordHash": "$2b$10$KZVpowaXBTtTBLZlb6fEkud56WSslMCGil9Mfol86PgKpWo5.Jqje"
+  },
+  {
+    "username": "12345",
+    "passwordHash": "$2b$10$sPW8/OgQJpbXvCzuiT2hhe6O2IgoUrNqJYV7AtfwzLRqhGq1Oy9Yy"
+  },
+  {
+    "username": "1078710",
+    "passwordHash": "$2b$10$dqBlEmvaXu4M4O2i3RAPC.7HOFdPzAVpbhzmTU0j81/GZK5DZPWKm"
+  },
+  {
+    "username": "tarunips983@gmail.com",
+    "passwordHash": "$2b$10$xk7VfN6LJ52qwhqrBDtDDecDrfReEhWX.ReAF1f9ESfVtKDkEjxmC"
+  },
+  {
+    "username": "ramalakshmi.b771@gmail.com",
+    "passwordHash": "$2b$10$vLnQsBJLbC.TjU0tZyUBqOy4aHvC5Ltkbgnyj8U05xQAj41ImEAli"
+  },
+  {
+    "username": "raghu.suru@gmail.com",
+    "passwordHash": "$2b$10$wOvboHHDXJtooT96xIzlqe.z.YEkhQFbmVIvGIRTfFtUbsFzEBzVu"
+  }
+]
