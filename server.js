@@ -33,9 +33,15 @@ const EMAIL_USER = "tmcamotp@gmail.com";
 const EMAIL_PASS = "myve tejj ucgt ikbo";
 
 const transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: { user: EMAIL_USER, pass: EMAIL_PASS },
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true,
+    auth: {
+        user: EMAIL_USER,
+        pass: EMAIL_PASS
+    }
 });
+
 
 // ✅ Authentication Middleware
 const JWT_SECRET = "810632";
@@ -269,7 +275,8 @@ app.post("/register-send-otp", async (req, res) => {
         res.json({ message: "OTP sent" });
 
     } catch (err) {
-        res.status(500).json({ message: "Server error" });
+        console.error("EMAIL ERROR:", err);  // ✅ PRINT FULL ERROR to Render logs
+    return res.status(500).json({ message: "Email sending failed", error: err.toString() });
     }
 });
 
@@ -322,4 +329,5 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`✅ Server running on port ${PORT}`);
 });
+
 
