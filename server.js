@@ -237,6 +237,53 @@ app.post("/daily-progress", authenticateToken, async (req, res) => {
     await safeWriteJson(dailyFile, snapshots);
     res.json({ success: true });
 });
+// ✅ GET snapshot by ID
+app.get("/daily-progress/:id", async (req, res) => {
+    const snapshots = await readJsonFile(dailyFile, []);
+    const id = Number(req.params.id);
+
+    const snap = snapshots.find(s => s.id === id);
+    if (!snap) return res.status(404).json({ error: "Snapshot not found" });
+
+    res.json(snap);
+});
+
+// ✅ DELETE snapshot by ID
+app.delete("/daily-progress/:id", authenticateToken, async (req, res) => {
+    let snapshots = await readJsonFile(dailyFile, []);
+    const id = Number(req.params.id);
+
+    const exists = snapshots.some(s => s.id === id);
+    if (!exists) return res.status(404).json({ error: "Not found" });
+
+    snapshots = snapshots.filter(s => s.id !== id);
+    await safeWriteJson(dailyFile, snapshots);
+
+    res.json({ success: true });
+});
+
+// ✅ BATCH IMPORT for Excel uploads
+app.post("/daily-progress/batch-import", authenticateToken, async (req, res) => {
+    const snapshotsToSave = req.body;
+
+    if (!Array.isArray(snapshotsToSave) || snapshotsToSave.length === 0) {
+        return res.status(400).json({ error: "Invalid batch data" });
+    }
+
+    let snapshots = await readJsonFile(dailyFile, []);
+
+    snapshotsToSave.forEach(snap => {
+        snapshots.push({
+            id: Date.now() + Math.floor(Math.random() * 1000),
+            date: snap.date,
+            tableHTML: snap.tableHTML,
+            rowCount: snap.rowCount
+        });
+    });
+
+    await safeWriteJson(dailyFile, snapshots);
+    res.json({ success: true, message: "Batch import completed" });
+});
 
 // =================================================================
 // ✅ USER AUTH (Register, OTP, Login)
@@ -329,6 +376,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
