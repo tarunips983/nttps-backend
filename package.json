@@ -14,7 +14,7 @@
     "bcrypt": "^5.1.0",
     "jsonwebtoken": "^9.0.1",
     "nodemailer": "^6.9.4",
-    "mime-types": "^2.1.35"
+    "mime-types": "^2.1.35",
     "dotenv": "^16.3.1"
   }
 }
