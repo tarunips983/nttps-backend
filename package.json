@@ -16,6 +16,7 @@
     "nodemailer": "^6.9.4",
     "mime-types": "^2.1.35",
     "dotenv": "^16.3.1",
-    "cloudinary": "^1.41.0"
+    "cloudinary": "^1.41.0",
+    "streamifier": "^0.1.1"
   }
 }
