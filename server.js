@@ -1,34 +1,51 @@
+require("dotenv").config(); // Load .env first
+
 const express = require("express");
 const cors = require("cors");
 const multer = require("multer");
 const fs = require("fs");
 const fsp = require("fs").promises;
 const path = require("path");
-const mime = require("mime-types");
 const pdf = require("pdf-parse");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const nodemailer = require("nodemailer");
 
+// CLOUDINARY IMPORTS
+const cloudinary = require("cloudinary").v2;
+const streamifier = require("streamifier");
+
+// CONFIGURE CLOUDINARY
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
 const app = express();
 
-
-// ✅ CORS
+// ---------------------------------------------
+// CORS
+// ---------------------------------------------
 app.use(cors({
     origin: "*",
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
 }));
 
-// ✅ File paths
+// ---------------------------------------------
+// FILE PATHS
+// ---------------------------------------------
 const USERS_FILE = path.join(__dirname, "users.json");
-const uploadsFolder = path.join(__dirname, "uploads");
+const uploadsFolder = path.join(__dirname, "uploads"); // old path but unused
 const dataFile = path.join(__dirname, "data.json");
 const dailyFile = path.join(__dirname, "daily.json");
 
 if (!fs.existsSync(uploadsFolder)) fs.mkdirSync(uploadsFolder);
 
-// ✅ Email Setup
+// ---------------------------------------------
+// EMAIL SETUP
+// ---------------------------------------------
 const EMAIL_USER = process.env.EMAIL_USER;
 const EMAIL_PASS = process.env.EMAIL_PASS;
 
@@ -36,15 +53,14 @@ const transporter = nodemailer.createTransport({
     host: "smtp.gmail.com",
     port: 465,
     secure: true,
-    auth: {
-        user: EMAIL_USER,
-        pass: EMAIL_PASS
-    }
+    auth: { user: EMAIL_USER, pass: EMAIL_PASS }
 });
 
-
-// ✅ Authentication Middleware
+// ---------------------------------------------
+// AUTHENTICATION MIDDLEWARE
+// ---------------------------------------------
 const JWT_SECRET = "810632";
+
 function authenticateToken(req, res, next) {
     const authHeader = req.headers["authorization"];
     const token = authHeader && authHeader.split(" ")[1];
@@ -57,105 +73,134 @@ function authenticateToken(req, res, next) {
     });
 }
 
-// ✅ Multer setups
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => cb(null, uploadsFolder),
-    filename: (req, file, cb) =>
-        cb(null, Date.now() + "-" + file.originalname.replace(/\s+/g, "_")),
-});
-const upload = multer({ storage });
+// ---------------------------------------------
+// MULTER MEMORY STORAGE FOR CLOUDINARY
+// ---------------------------------------------
 const uploadInMemory = multer({ storage: multer.memoryStorage() });
 
-// ✅ Middleware
-app.use("/uploads", express.static(uploadsFolder));
+// ---------------------------------------------
+// MIDDLEWARE
+// ---------------------------------------------
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
-// ✅ Read JSON helper
+// ---------------------------------------------
+// UTILS
+// ---------------------------------------------
 async function readJsonFile(filePath, defaultData = []) {
     try {
         const data = await fsp.readFile(filePath, "utf8");
-        if (data.trim() === "") return defaultData;
+        if (!data.trim()) return defaultData;
         return JSON.parse(data);
-    } catch (err) {
+    } catch {
         return defaultData;
     }
 }
 
-// ✅ Safe write JSON
 async function safeWriteJson(filePath, data) {
-    const tmp = filePath + ".tmp";
-    await fsp.writeFile(tmp, JSON.stringify(data, null, 2));
-    await fsp.rename(tmp, filePath);
+    const temp = filePath + ".tmp";
+    await fsp.writeFile(temp, JSON.stringify(data, null, 2));
+    await fsp.rename(temp, filePath);
 }
 
 // =================================================================
-// ✅ RECORD ROUTES
+// RECORD ROUTES
 // =================================================================
 
+// Get all non-deleted records
 app.get("/records", async (req, res) => {
     const records = await readJsonFile(dataFile, []);
     res.json(records.filter(r => !r.isDeleted));
 });
 
+// Get trash
 app.get("/records/trash", authenticateToken, async (req, res) => {
     const records = await readJsonFile(dataFile, []);
     res.json(records.filter(r => r.isDeleted));
 });
 
-app.post("/upload", authenticateToken, upload.array("pdfs", 10), async (req, res) => {
-    let records = await readJsonFile(dataFile, []);
+// ---------------------------------------------------------
+// CLOUDINARY UPLOAD ROUTE — REPLACES OLD LOCAL UPLOAD
+// ---------------------------------------------------------
+app.post("/upload", authenticateToken, uploadInMemory.array("pdfs", 10), async (req, res) => {
+    try {
+        let records = await readJsonFile(dataFile, []);
+        if (!req.files || req.files.length === 0) {
+            return res.status(400).json({ error: "No PDFs uploaded" });
+        }
 
-    if (req.files && req.files.length > 0) {
-        req.files.forEach((file) => {
+        const uploadedFiles = await Promise.all(
+            req.files.map(file =>
+                new Promise((resolve, reject) => {
+                    const uploadStream = cloudinary.uploader.upload_stream(
+                        {
+                            folder: "pdf_uploads",
+                            resource_type: "raw"
+                        },
+                        (error, result) => {
+                            if (error) return reject(error);
+                            resolve({ result, originalname: file.originalname });
+                        }
+                    );
+                    streamifier.createReadStream(file.buffer).pipe(uploadStream);
+                })
+            )
+        );
+
+        // Save in JSON database
+        uploadedFiles.forEach(u => {
             records.push({
                 id: Date.now() + Math.floor(Math.random() * 1000),
-                workName: req.body.workName || file.originalname,
+                workName: req.body.workName || u.originalname,
                 prNo: req.body.prNo || "N/A",
                 subDivision: req.body.subDivision || "N/A",
                 recordType: req.body.recordType || "Other Record",
                 amount: req.body.amount || "0",
                 sendTo: req.body.sendTo || "N/A",
-                pdfPath: `/uploads/${file.filename}`,
-                isDeleted: false,
+                pdfPath: u.result.secure_url,
+                cloudinaryPublicId: u.result.public_id,
+                isDeleted: false
             });
         });
-    }
 
-    await safeWriteJson(dataFile, records);
-    res.json({ success: true, records });
+        await safeWriteJson(dataFile, records);
+        res.json({ success: true, records });
+
+    } catch (err) {
+        console.error("UPLOAD ERROR:", err);
+        res.status(500).json({ error: "Upload failed" });
+    }
 });
 
-// ✅ Delete (move to trash)
+// Move to trash
 app.delete("/records/:id", authenticateToken, async (req, res) => {
     let records = await readJsonFile(dataFile, []);
     const id = Number(req.params.id);
 
-    const idx = records.findIndex(r => r.id === id);
-    if (idx === -1) return res.status(404).json({ error: "Not found" });
+    const index = records.findIndex(r => r.id === id);
+    if (index === -1) return res.status(404).json({ error: "Not found" });
 
-    records[idx].isDeleted = true;
+    records[index].isDeleted = true;
     await safeWriteJson(dataFile, records);
 
     res.json({ success: true });
 });
 
-// ✅ Restore
+// Restore
 app.post("/records/:id/restore", authenticateToken, async (req, res) => {
     let records = await readJsonFile(dataFile, []);
     const id = Number(req.params.id);
 
-    const idx = records.findIndex(r => r.id === id);
-    if (idx === -1) return res.status(404).json({ error: "Not found" });
+    const index = records.findIndex(r => r.id === id);
+    if (index === -1) return res.status(404).json({ error: "Not found" });
 
-    records[idx].isDeleted = false;
-    delete records[idx].deletedOn;
-
+    records[index].isDeleted = false;
     await safeWriteJson(dataFile, records);
+
     res.json({ success: true });
 });
 
-// ✅ Permanent delete from trash
+// Permanent Delete (Cloudinary Delete)
 app.delete("/records/trash/:id", authenticateToken, async (req, res) => {
     let records = await readJsonFile(dataFile, []);
     const id = Number(req.params.id);
@@ -163,9 +208,14 @@ app.delete("/records/trash/:id", authenticateToken, async (req, res) => {
     const record = records.find(r => r.id === id);
     if (!record) return res.status(404).json({ error: "Not found" });
 
-    if (record.pdfPath) {
-        const pdfPath = path.join(__dirname, record.pdfPath);
-        if (fs.existsSync(pdfPath)) await fsp.unlink(pdfPath);
+    if (record.cloudinaryPublicId) {
+        try {
+            await cloudinary.uploader.destroy(record.cloudinaryPublicId, {
+                resource_type: "raw"
+            });
+        } catch (err) {
+            console.log("Cloudinary delete error:", err);
+        }
     }
 
     records = records.filter(r => r.id !== id);
@@ -175,118 +225,75 @@ app.delete("/records/trash/:id", authenticateToken, async (req, res) => {
 });
 
 // =================================================================
-// ✅ PDF EXTRACTION ROUTE (WORKING, NO AI)
+// PDF EXTRACTION
 // =================================================================
 
 app.post("/extract-pdf", authenticateToken, uploadInMemory.single("pdfFile"), async (req, res) => {
-    if (!req.file) return res.status(400).json({ error: "No PDF file" });
+    if (!req.file) return res.status(400).json({ error: "No PDF uploaded" });
 
     try {
         const data = await pdf(req.file.buffer);
         const text = data.text;
 
-        const prNoMatch = text.match(/PR\s*No\.?\s*[:\-]?\s*(\d+)/i);
-        const amountMatch = text.match(/Estimated\s*Value\s*[:\-]?\s*([\d,]+\.?\d*)/i);
-        const divisionMatch = text.match(/Division\s*:\s*([A-Za-z0-9\-]+)/i);
-        const briefMatch = text.match(/Brief Description\s*:\s*(.+)/i);
-
         res.json({
-            prNo: prNoMatch ? prNoMatch[1].trim() : "",
-            workName: briefMatch ? briefMatch[1].trim() : "",
-            amount: amountMatch ? amountMatch[1].replace(/,/g, "") : "",
-            subDivision: divisionMatch ? divisionMatch[1] : "",
+            prNo: (text.match(/PR\s*No\.?\s*[:\-]?\s*(\d+)/i) || ["", ""])[1],
+            workName: (text.match(/Brief Description\s*:\s*(.+)/i) || ["", ""])[1],
+            amount: (text.match(/Estimated\s*Value\s*[:\-]?\s*([\d,]+\.?\d*)/i) || ["", ""])[1],
+            subDivision: (text.match(/Division\s*:\s*([A-Za-z0-9\-]+)/i) || ["", ""])[1],
             recordType: "PR"
         });
 
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Failed to read PDF content" });
+        res.status(500).json({ error: "Failed to read PDF" });
     }
 });
 
 // =================================================================
-// ✅ DAILY PROGRESS ROUTES
+// DAILY PROGRESS ROUTES
 // =================================================================
 
 app.get("/daily-progress", async (req, res) => {
-    const snapshots = await readJsonFile(dailyFile, []);
-    res.json(snapshots);
+    res.json(await readJsonFile(dailyFile, []));
+});
+
+app.get("/daily-progress/:id", async (req, res) => {
+    const id = Number(req.params.id);
+    const snaps = await readJsonFile(dailyFile, []);
+    const snap = snaps.find(s => s.id === id);
+    if (!snap) return res.status(404).json({ error: "Not found" });
+    res.json(snap);
 });
 
 app.post("/daily-progress", authenticateToken, async (req, res) => {
     const { id, date, tableHTML, rowCount } = req.body;
-    let snapshots = await readJsonFile(dailyFile, []);
 
-    if (!date || tableHTML === undefined)
-        return res.status(400).json({ error: "Missing fields" });
+    let snaps = await readJsonFile(dailyFile, []);
 
     if (id) {
-        const index = snapshots.findIndex(s => s.id == id);
+        const index = snaps.findIndex(s => s.id == id);
         if (index !== -1) {
-            snapshots[index] = { ...snapshots[index], date, tableHTML, rowCount };
+            snaps[index] = { ...snaps[index], date, tableHTML, rowCount };
         }
     } else {
-        snapshots.push({
-            id: Date.now(),
-            date,
-            tableHTML,
-            rowCount
-        });
+        snaps.push({ id: Date.now(), date, tableHTML, rowCount });
     }
 
-    await safeWriteJson(dailyFile, snapshots);
+    await safeWriteJson(dailyFile, snaps);
     res.json({ success: true });
 });
-// ✅ GET snapshot by ID
-app.get("/daily-progress/:id", async (req, res) => {
-    const snapshots = await readJsonFile(dailyFile, []);
-    const id = Number(req.params.id);
 
-    const snap = snapshots.find(s => s.id === id);
-    if (!snap) return res.status(404).json({ error: "Snapshot not found" });
-
-    res.json(snap);
-});
-
-// ✅ DELETE snapshot by ID
 app.delete("/daily-progress/:id", authenticateToken, async (req, res) => {
-    let snapshots = await readJsonFile(dailyFile, []);
+    let snaps = await readJsonFile(dailyFile, []);
     const id = Number(req.params.id);
 
-    const exists = snapshots.some(s => s.id === id);
-    if (!exists) return res.status(404).json({ error: "Not found" });
-
-    snapshots = snapshots.filter(s => s.id !== id);
-    await safeWriteJson(dailyFile, snapshots);
+    snaps = snaps.filter(s => s.id !== id);
+    await safeWriteJson(dailyFile, snaps);
 
     res.json({ success: true });
-});
-
-// ✅ BATCH IMPORT for Excel uploads
-app.post("/daily-progress/batch-import", authenticateToken, async (req, res) => {
-    const snapshotsToSave = req.body;
-
-    if (!Array.isArray(snapshotsToSave) || snapshotsToSave.length === 0) {
-        return res.status(400).json({ error: "Invalid batch data" });
-    }
-
-    let snapshots = await readJsonFile(dailyFile, []);
-
-    snapshotsToSave.forEach(snap => {
-        snapshots.push({
-            id: Date.now() + Math.floor(Math.random() * 1000),
-            date: snap.date,
-            tableHTML: snap.tableHTML,
-            rowCount: snap.rowCount
-        });
-    });
-
-    await safeWriteJson(dailyFile, snapshots);
-    res.json({ success: true, message: "Batch import completed" });
 });
 
 // =================================================================
-// ✅ USER AUTH (Register, OTP, Login)
+// USER AUTH
 // =================================================================
 
 let pendingVerifications = {};
@@ -322,8 +329,7 @@ app.post("/register-send-otp", async (req, res) => {
         res.json({ message: "OTP sent" });
 
     } catch (err) {
-        console.error("EMAIL ERROR:", err);  // ✅ PRINT FULL ERROR to Render logs
-    return res.status(500).json({ message: "Email sending failed", error: err.toString() });
+        res.status(500).json({ message: "Email sending failed", error: err.toString() });
     }
 });
 
@@ -349,7 +355,7 @@ app.post("/login", async (req, res) => {
     const users = await readJsonFile(USERS_FILE, []);
     const user = users.find(u => u.username === username);
 
-    if (!user || !await bcrypt.compare(password, user.passwordHash))
+    if (!user || !(await bcrypt.compare(password, user.passwordHash)))
         return res.status(401).json({ message: "Invalid login" });
 
     const token = jwt.sign({ username }, JWT_SECRET, { expiresIn: "1h" });
@@ -358,25 +364,15 @@ app.post("/login", async (req, res) => {
 });
 
 // =================================================================
-// ✅ STATIC FILE SERVING
+// STATIC FILES
 // =================================================================
-
 app.use(express.static(__dirname, { extensions: ["html"] }));
 
 // =================================================================
-// ✅ START SERVER
+// START SERVER
 // =================================================================
-
-// =================================================================
-// ✅ START SERVER (Render-compatible)
-// =================================================================
-
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
     console.log(`✅ Server running on port ${PORT}`);
 });
-
-
-
-
