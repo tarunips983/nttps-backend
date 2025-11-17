@@ -6,7 +6,6 @@ const multer = require("multer");
 const fs = require("fs");
 const fsp = require("fs").promises;
 const path = require("path");
-const pdf = require("pdf-parse");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const nodemailer = require("nodemailer");
@@ -21,6 +20,8 @@ cloudinary.config({
     api_key: process.env.CLOUDINARY_API_KEY,
     api_secret: process.env.CLOUDINARY_API_SECRET,
 });
+process.env.PDFJS_NO_CMAP = "true";
+process.env.PDFJS_NO_STANDARD_FONTS = "true";
 
 const app = express();
 
@@ -225,28 +226,48 @@ app.delete("/records/trash/:id", authenticateToken, async (req, res) => {
 });
 
 // =================================================================
-// PDF EXTRACTION
+// BETTER PDF EXTRACTION USING pdfjs-dist (REPLACES pdf-parse)
 // =================================================================
+
+const pdfjsLib = require("pdfjs-dist/legacy/build/pdf.js");
 
 app.post("/extract-pdf", authenticateToken, uploadInMemory.single("pdfFile"), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: "No PDF uploaded" });
 
     try {
-        const data = await pdf(req.file.buffer);
-        const text = data.text;
+        const loadingTask = pdfjsLib.getDocument({ data: req.file.buffer });
+        const pdf = await loadingTask.promise;
+
+        let extractedText = "";
+
+        for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const content = await page.getTextContent();
+            extractedText += content.items.map(i => i.str).join(" ") + "\n";
+        }
+
+        const text = extractedText.replace(/\s+/g, " ").trim();
+
+        // Extract fields with REGEX
+        const prNoMatch = text.match(/PR\s*No\.?\s*[:\-]?\s*(\d+)/i);
+        const amountMatch = text.match(/Estimated\s*Value\s*[:\-]?\s*([0-9,]+)/i);
+        const divisionMatch = text.match(/Division\s*:? ?([A-Za-z0-9\-]+)/i);
+        const briefMatch = text.match(/Brief Description[:\-]?\s*(.+?)(?= Estimate| PR|$)/i);
 
         res.json({
-            prNo: (text.match(/PR\s*No\.?\s*[:\-]?\s*(\d+)/i) || ["", ""])[1],
-            workName: (text.match(/Brief Description\s*:\s*(.+)/i) || ["", ""])[1],
-            amount: (text.match(/Estimated\s*Value\s*[:\-]?\s*([\d,]+\.?\d*)/i) || ["", ""])[1],
-            subDivision: (text.match(/Division\s*:\s*([A-Za-z0-9\-]+)/i) || ["", ""])[1],
+            prNo: prNoMatch ? prNoMatch[1] : "",
+            workName: briefMatch ? briefMatch[1] : "",
+            amount: amountMatch ? amountMatch[1].replace(/,/g, "") : "",
+            subDivision: divisionMatch ? divisionMatch[1] : "",
             recordType: "PR"
         });
 
     } catch (err) {
-        res.status(500).json({ error: "Failed to read PDF" });
+        console.error("PDF extract error:", err);
+        res.status(500).json({ error: "Failed to extract PDF" });
     }
 });
+
 
 // =================================================================
 // DAILY PROGRESS ROUTES
@@ -376,3 +397,4 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`✅ Server running on port ${PORT}`);
 });
+
