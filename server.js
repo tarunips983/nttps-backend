@@ -229,7 +229,7 @@ app.delete("/records/trash/:id", authenticateToken, async (req, res) => {
 // BETTER PDF EXTRACTION USING pdfjs-dist (REPLACES pdf-parse)
 // =================================================================
 
-const pdfjsLib = require("pdfjs-dist/legacy/build/pdf.js");
+const pdfjsLib = require("pdfjs-dist");
 
 app.post("/extract-pdf", authenticateToken, uploadInMemory.single("pdfFile"), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: "No PDF uploaded" });
@@ -397,4 +397,5 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`✅ Server running on port ${PORT}`);
 });
+
 
