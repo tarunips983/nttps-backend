@@ -134,16 +134,18 @@ app.post("/upload", authenticateToken, uploadInMemory.array("pdfs", 10), async (
     req.files.map(file =>
         new Promise((resolve, reject) => {
             const uploadStream = cloudinary.uploader.upload_stream(
-                {
-                    folder: "pdf_uploads",
-                    resource_type: "auto",   // <-- FIXED
-                    format: "pdf"            // <-- optional but recommended
-                },
-                (error, result) => {
-                    if (error) return reject(error);
-                    resolve({ result, originalname: file.originalname });
-                }
-            );
+{
+    folder: "pdf_uploads",
+    resource_type: "raw",
+    type: "upload",
+    access_mode: "public"   // ← THIS MAKES PDF VIEWABLE IN IFRAME
+},
+(error, result) => {
+    if (error) return reject(error);
+    resolve({ result, originalname: file.originalname });
+}
+);
+
             streamifier.createReadStream(file.buffer).pipe(uploadStream);
         })
     )
@@ -398,6 +400,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
