@@ -131,22 +131,23 @@ app.post("/upload", authenticateToken, uploadInMemory.array("pdfs", 10), async (
         }
 
         const uploadedFiles = await Promise.all(
-            req.files.map(file =>
-                new Promise((resolve, reject) => {
-                    const uploadStream = cloudinary.uploader.upload_stream(
-                        {
-                            folder: "pdf_uploads",
-                            resource_type: "raw"
-                        },
-                        (error, result) => {
-                            if (error) return reject(error);
-                            resolve({ result, originalname: file.originalname });
-                        }
-                    );
-                    streamifier.createReadStream(file.buffer).pipe(uploadStream);
-                })
-            )
-        );
+    req.files.map(file =>
+        new Promise((resolve, reject) => {
+            const uploadStream = cloudinary.uploader.upload_stream(
+                {
+                    folder: "pdf_uploads",
+                    resource_type: "auto",   // <-- FIXED
+                    format: "pdf"            // <-- optional but recommended
+                },
+                (error, result) => {
+                    if (error) return reject(error);
+                    resolve({ result, originalname: file.originalname });
+                }
+            );
+            streamifier.createReadStream(file.buffer).pipe(uploadStream);
+        })
+    )
+);
 
         // Save in JSON database
         uploadedFiles.forEach(u => {
@@ -397,5 +398,6 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
