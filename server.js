@@ -131,31 +131,33 @@ app.post("/upload", authenticateToken, uploadInMemory.array("pdfs", 10), async (
         }
 
         const uploadedFiles = await Promise.all(
-    req.files.map(file =>
-        new Promise((resolve, reject) => {
-            const uploadStream = cloudinary.uploader.upload_stream(
-{
-    folder: "pdf_uploads",
-    resource_type: "raw",
-    type: "upload",
-    access_mode: "public"   // ← THIS MAKES PDF VIEWABLE IN IFRAME
-},
-(error, result) => {
-    if (error) return reject(error);
-    resolve({ result, originalname: file.originalname });
-}
-);
+  req.files.map(file =>
+    new Promise((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          folder: "pdf_uploads",
+          resource_type: "raw",
+          format: "pdf"
+        },
+        (error, result) => {
+          if (error) return reject(error);
+          resolve({ result, originalname: file.originalname });
+        }
+      );
 
-            streamifier.createReadStream(file.buffer).pipe(uploadStream);
-        })
-    )
+      streamifier.createReadStream(file.buffer).pipe(uploadStream);
+    })
+  )
 );
 
         // Save in JSON database
         uploadedFiles.forEach(u => {
             records.push({
                 id: Date.now() + Math.floor(Math.random() * 1000),
-                workName: req.body.workName || u.originalname,
+                let fileName = u.originalname;
+if (!fileName.toLowerCase().endsWith(".pdf")) {
+    fileName = fileName + ".pdf";
+}
                 prNo: req.body.prNo || "N/A",
                 subDivision: req.body.subDivision || "N/A",
                 recordType: req.body.recordType || "Other Record",
@@ -400,6 +402,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
