@@ -607,8 +607,4 @@ app.use(express.static(__dirname, { extensions: ["html"] }));
 // =================================================================
 // START SERVER
 // =================================================================
-const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, () => {
-  console.log(`✅ Server running on port ${PORT}`);
-});
+module.exports = app;
