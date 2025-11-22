@@ -3,23 +3,25 @@ require("dotenv").config(); // Load .env first
 const express = require("express");
 const cors = require("cors");
 const multer = require("multer");
-const fs = require("fs");
-const fsp = require("fs").promises;
 const path = require("path");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const nodemailer = require("nodemailer");
 
-// CLOUDINARY IMPORTS
-const cloudinary = require("cloudinary").v2;
-const streamifier = require("streamifier");
+// =========================
+// SUPABASE
+// =========================
+const { createClient } = require("@supabase/supabase-js");
 
-// CONFIGURE CLOUDINARY
-cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET,
-});
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE;
+
+if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE) {
+  throw new Error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE environment variables");
+}
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE);
+
 process.env.PDFJS_NO_CMAP = "true";
 process.env.PDFJS_NO_STANDARD_FONTS = "true";
 
@@ -28,21 +30,13 @@ const app = express();
 // ---------------------------------------------
 // CORS
 // ---------------------------------------------
-app.use(cors({
+app.use(
+  cors({
     origin: "*",
     methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
-}));
-
-// ---------------------------------------------
-// FILE PATHS
-// ---------------------------------------------
-const USERS_FILE = path.join(__dirname, "users.json");
-const uploadsFolder = path.join(__dirname, "uploads"); // old path but unused
-const dataFile = path.join(__dirname, "data.json");
-const dailyFile = path.join(__dirname, "daily.json");
-
-if (!fs.existsSync(uploadsFolder)) fs.mkdirSync(uploadsFolder);
+  })
+);
 
 // ---------------------------------------------
 // EMAIL SETUP
@@ -51,31 +45,31 @@ const EMAIL_USER = process.env.EMAIL_USER;
 const EMAIL_PASS = process.env.EMAIL_PASS;
 
 const transporter = nodemailer.createTransport({
-    host: "smtp.gmail.com",
-    port: 465,
-    secure: true,
-    auth: { user: EMAIL_USER, pass: EMAIL_PASS }
+  host: "smtp.gmail.com",
+  port: 465,
+  secure: true,
+  auth: { user: EMAIL_USER, pass: EMAIL_PASS },
 });
 
 // ---------------------------------------------
-// AUTHENTICATION MIDDLEWARE
+// AUTHENTICATION MIDDLEWARE (same JWT logic)
 // ---------------------------------------------
 const JWT_SECRET = "810632";
 
 function authenticateToken(req, res, next) {
-    const authHeader = req.headers["authorization"];
-    const token = authHeader && authHeader.split(" ")[1];
-    if (!token) return res.status(401).json({ message: "Unauthorized" });
+  const authHeader = req.headers["authorization"];
+  const token = authHeader && authHeader.split(" ")[1];
+  if (!token) return res.status(401).json({ message: "Unauthorized" });
 
-    jwt.verify(token, JWT_SECRET, (err, user) => {
-        if (err) return res.status(403).json({ message: "Invalid token" });
-        req.user = user;
-        next();
-    });
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) return res.status(403).json({ message: "Invalid token" });
+    req.user = user;
+    next();
+  });
 }
 
 // ---------------------------------------------
-// MULTER MEMORY STORAGE FOR CLOUDINARY
+// MULTER MEMORY STORAGE (for Supabase upload)
 // ---------------------------------------------
 const uploadInMemory = multer({ storage: multer.memoryStorage() });
 
@@ -86,307 +80,523 @@ app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 // ---------------------------------------------
-// UTILS
+// HELPERS: map DB rows -> frontend shape
 // ---------------------------------------------
-async function readJsonFile(filePath, defaultData = []) {
-    try {
-        const data = await fsp.readFile(filePath, "utf8");
-        if (!data.trim()) return defaultData;
-        return JSON.parse(data);
-    } catch {
-        return defaultData;
-    }
+function mapRecordRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    workName: row.work_name,
+    prNo: row.pr_no,
+    subDivision: row.sub_division,
+    recordType: row.record_type,
+    amount: row.amount,
+    sendTo: row.send_to,
+    pdfPath: row.pdf_url,
+    isDeleted: row.is_deleted,
+    createdAt: row.created_at,
+  };
 }
 
-async function safeWriteJson(filePath, data) {
-    const temp = filePath + ".tmp";
-    await fsp.writeFile(temp, JSON.stringify(data, null, 2));
-    await fsp.rename(temp, filePath);
+function mapDailyRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    date: row.date,
+    tableHTML: row.table_html,
+    rowCount: row.row_count,
+    createdAt: row.created_at,
+  };
 }
 
 // =================================================================
-// RECORD ROUTES
+// RECORD ROUTES (use Supabase instead of data.json)
 // =================================================================
 
 // Get all non-deleted records
 app.get("/records", async (req, res) => {
-    const records = await readJsonFile(dataFile, []);
-    res.json(records.filter(r => !r.isDeleted));
+  try {
+    const { data, error } = await supabase
+      .from("records")
+      .select("*")
+      .eq("is_deleted", false)
+      .order("id", { ascending: false });
+
+    if (error) throw error;
+
+    const mapped = data.map(mapRecordRow);
+    res.json(mapped);
+  } catch (err) {
+    console.error("GET /records error:", err);
+    res.status(500).json({ error: "Failed to load records" });
+  }
 });
 
-// Get trash
+// Get trash (deleted records)
 app.get("/records/trash", authenticateToken, async (req, res) => {
-    const records = await readJsonFile(dataFile, []);
-    res.json(records.filter(r => r.isDeleted));
+  try {
+    const { data, error } = await supabase
+      .from("records")
+      .select("*")
+      .eq("is_deleted", true)
+      .order("id", { ascending: false });
+
+    if (error) throw error;
+
+    // frontend expects deletedOn, so just reuse created_at
+    const mapped = data.map((row) => ({
+      ...mapRecordRow(row),
+      deletedOn: row.created_at,
+    }));
+
+    res.json(mapped);
+  } catch (err) {
+    console.error("GET /records/trash error:", err);
+    res.status(500).json({ error: "Failed to load trash" });
+  }
 });
 
 // ---------------------------------------------------------
-// CLOUDINARY UPLOAD ROUTE — REPLACES OLD LOCAL UPLOAD
+// PDF UPLOAD to Supabase Storage (replaces Cloudinary + JSON)
 // ---------------------------------------------------------
-app.post("/upload", authenticateToken, uploadInMemory.array("pdfs", 10), async (req, res) => {
+const PDF_BUCKET = "pdfs"; // make sure this bucket exists in Supabase
+
+app.post(
+  "/upload",
+  authenticateToken,
+  uploadInMemory.array("pdfs", 10),
+  async (req, res) => {
     try {
-        let records = await readJsonFile(dataFile, []);
-        if (!req.files || req.files.length === 0) {
-            return res.status(400).json({ error: "No PDFs uploaded" });
+      const {
+        id, // optional for edit
+        workName,
+        prNo,
+        subDivision,
+        recordType,
+        amount,
+        sendTo,
+        pdfPath, // old path (if editing without new file)
+      } = req.body;
+
+      let newPdfUrl = null;
+
+      // If a file is uploaded, store it in Supabase
+      if (req.files && req.files.length > 0) {
+        const file = req.files[0]; // you currently use only one PDF per record
+
+        const ext =
+          path.extname(file.originalname) ||
+          (file.mimetype === "application/pdf" ? ".pdf" : "");
+        const uniqueName =
+          Date.now() +
+          "_" +
+          Math.random().toString(36).slice(2) +
+          ext.replace(/[^a-zA-Z0-9.]/g, "_");
+
+        const { data: uploadData, error: uploadError } = await supabase
+          .storage
+          .from(PDF_BUCKET)
+          .upload(uniqueName, file.buffer, {
+            contentType: file.mimetype || "application/pdf",
+            upsert: false,
+          });
+
+        if (uploadError) {
+          console.error("Supabase upload error:", uploadError);
+          return res.status(500).json({ error: "Failed to upload PDF" });
         }
 
-        const uploadedFiles = await Promise.all(
-  req.files.map(file =>
-    new Promise((resolve, reject) => {
-      const uploadStream = cloudinary.uploader.upload_stream(
-        {
-          folder: "pdf_uploads",
-          resource_type: "raw",
-          format: "pdf"
-        },
-        (error, result) => {
-          if (error) return reject(error);
-          resolve({ result, originalname: file.originalname });
+        const { data: publicUrlData } = supabase
+          .storage
+          .from(PDF_BUCKET)
+          .getPublicUrl(uploadData.path);
+
+        newPdfUrl = publicUrlData.publicUrl;
+      }
+
+      // If editing but no new file, keep old pdfPath
+      const finalPdfUrl = newPdfUrl || pdfPath || null;
+
+      if (!id && !finalPdfUrl) {
+        return res.status(400).json({ error: "PDF file is required for new records" });
+      }
+
+      if (id) {
+        // UPDATE existing record
+        const updatePayload = {
+          work_name: workName || null,
+          pr_no: prNo || null,
+          sub_division: subDivision || null,
+          record_type: recordType || null,
+          amount: amount || null,
+          send_to: sendTo || null,
+        };
+        if (finalPdfUrl) {
+          updatePayload.pdf_url = finalPdfUrl;
         }
-      );
 
-      streamifier.createReadStream(file.buffer).pipe(uploadStream);
-    })
-  )
-);
+        const { data, error } = await supabase
+          .from("records")
+          .update(updatePayload)
+          .eq("id", Number(id))
+          .select("*");
 
-        // Save in JSON database
-        uploadedFiles.forEach(u => {
-            records.push({
-                id: Date.now() + Math.floor(Math.random() * 1000),
-                let fileName = u.originalname;
-if (!fileName.toLowerCase().endsWith(".pdf")) {
-    fileName = fileName + ".pdf";
-}
-                prNo: req.body.prNo || "N/A",
-                subDivision: req.body.subDivision || "N/A",
-                recordType: req.body.recordType || "Other Record",
-                amount: req.body.amount || "0",
-                sendTo: req.body.sendTo || "N/A",
-                pdfPath: u.result.secure_url,
-                cloudinaryPublicId: u.result.public_id,
-                isDeleted: false
-            });
+        if (error) throw error;
+
+        return res.json({
+          success: true,
+          record: mapRecordRow(data[0]),
         });
+      } else {
+        // INSERT new record
+        const { data, error } = await supabase
+          .from("records")
+          .insert({
+            work_name: workName || null,
+            pr_no: prNo || null,
+            sub_division: subDivision || null,
+            record_type: recordType || "Other Record",
+            amount: amount || 0,
+            send_to: sendTo || null,
+            pdf_url: finalPdfUrl,
+            is_deleted: false,
+          })
+          .select("*");
 
-        await safeWriteJson(dataFile, records);
-        res.json({ success: true, records });
+        if (error) throw error;
 
+        return res.json({
+          success: true,
+          record: mapRecordRow(data[0]),
+        });
+      }
     } catch (err) {
-        console.error("UPLOAD ERROR:", err);
-        res.status(500).json({ error: "Upload failed" });
+      console.error("UPLOAD ERROR:", err);
+      res.status(500).json({ error: "Upload failed" });
     }
-});
+  }
+);
 
 // Move to trash
 app.delete("/records/:id", authenticateToken, async (req, res) => {
-    let records = await readJsonFile(dataFile, []);
-    const id = Number(req.params.id);
+  const id = Number(req.params.id);
+  try {
+    const { error } = await supabase
+      .from("records")
+      .update({ is_deleted: true })
+      .eq("id", id);
 
-    const index = records.findIndex(r => r.id === id);
-    if (index === -1) return res.status(404).json({ error: "Not found" });
-
-    records[index].isDeleted = true;
-    await safeWriteJson(dataFile, records);
-
+    if (error) throw error;
     res.json({ success: true });
+  } catch (err) {
+    console.error("DELETE /records/:id error:", err);
+    res.status(500).json({ error: "Failed to move to trash" });
+  }
 });
 
-// Restore
+// Restore from trash
 app.post("/records/:id/restore", authenticateToken, async (req, res) => {
-    let records = await readJsonFile(dataFile, []);
-    const id = Number(req.params.id);
+  const id = Number(req.params.id);
+  try {
+    const { error } = await supabase
+      .from("records")
+      .update({ is_deleted: false })
+      .eq("id", id);
 
-    const index = records.findIndex(r => r.id === id);
-    if (index === -1) return res.status(404).json({ error: "Not found" });
-
-    records[index].isDeleted = false;
-    await safeWriteJson(dataFile, records);
-
+    if (error) throw error;
     res.json({ success: true });
+  } catch (err) {
+    console.error("RESTORE /records/:id error:", err);
+    res.status(500).json({ error: "Failed to restore record" });
+  }
 });
 
-// Permanent Delete (Cloudinary Delete)
+// Permanent delete + remove file from storage
 app.delete("/records/trash/:id", authenticateToken, async (req, res) => {
-    let records = await readJsonFile(dataFile, []);
-    const id = Number(req.params.id);
+  const id = Number(req.params.id);
 
-    const record = records.find(r => r.id === id);
-    if (!record) return res.status(404).json({ error: "Not found" });
+  try {
+    // 1. Find record
+    const { data, error } = await supabase
+      .from("records")
+      .select("*")
+      .eq("id", id)
+      .single();
 
-    if (record.cloudinaryPublicId) {
-        try {
-            await cloudinary.uploader.destroy(record.cloudinaryPublicId, {
-                resource_type: "raw"
-            });
-        } catch (err) {
-            console.log("Cloudinary delete error:", err);
+    if (error && error.code !== "PGRST116") throw error;
+    if (!data) return res.status(404).json({ error: "Not found" });
+
+    // 2. If PDF exists, delete from storage
+    if (data.pdf_url) {
+      try {
+        const urlObj = new URL(data.pdf_url);
+        const idx = urlObj.pathname.indexOf(`/object/public/${PDF_BUCKET}/`);
+        if (idx !== -1) {
+          const relativePath = urlObj.pathname.substring(
+            idx + `/object/public/${PDF_BUCKET}/`.length
+          );
+          await supabase.storage.from(PDF_BUCKET).remove([relativePath]);
         }
+      } catch (parseErr) {
+        console.warn("Failed to parse PDF URL for delete:", parseErr);
+      }
     }
 
-    records = records.filter(r => r.id !== id);
-    await safeWriteJson(dataFile, records);
+    // 3. Delete row
+    const { error: delError } = await supabase
+      .from("records")
+      .delete()
+      .eq("id", id);
+
+    if (delError) throw delError;
 
     res.json({ success: true });
+  } catch (err) {
+    console.error("DELETE /records/trash/:id error:", err);
+    res.status(500).json({ error: "Failed to permanently delete record" });
+  }
 });
 
 // =================================================================
-// BETTER PDF EXTRACTION USING pdfjs-dist (REPLACES pdf-parse)
+// PDF TEXT EXTRACTION (unchanged, still uses pdfjs-dist)
 // =================================================================
-
 const pdfjsLib = require("pdfjs-dist");
 
-app.post("/extract-pdf", authenticateToken, uploadInMemory.single("pdfFile"), async (req, res) => {
+app.post(
+  "/extract-pdf",
+  authenticateToken,
+  uploadInMemory.single("pdfFile"),
+  async (req, res) => {
     if (!req.file) return res.status(400).json({ error: "No PDF uploaded" });
 
     try {
-        const loadingTask = pdfjsLib.getDocument({ data: req.file.buffer });
-        const pdf = await loadingTask.promise;
+      const loadingTask = pdfjsLib.getDocument({ data: req.file.buffer });
+      const pdf = await loadingTask.promise;
 
-        let extractedText = "";
+      let extractedText = "";
 
-        for (let i = 1; i <= pdf.numPages; i++) {
-            const page = await pdf.getPage(i);
-            const content = await page.getTextContent();
-            extractedText += content.items.map(i => i.str).join(" ") + "\n";
-        }
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        extractedText += content.items.map((i) => i.str).join(" ") + "\n";
+      }
 
-        const text = extractedText.replace(/\s+/g, " ").trim();
+      const text = extractedText.replace(/\s+/g, " ").trim();
 
-        // Extract fields with REGEX
-        const prNoMatch = text.match(/PR\s*No\.?\s*[:\-]?\s*(\d+)/i);
-        const amountMatch = text.match(/Estimated\s*Value\s*[:\-]?\s*([0-9,]+)/i);
-        const divisionMatch = text.match(/Division\s*:? ?([A-Za-z0-9\-]+)/i);
-        const briefMatch = text.match(/Brief Description[:\-]?\s*(.+?)(?= Estimate| PR|$)/i);
+      const prNoMatch = text.match(/PR\s*No\.?\s*[:\-]?\s*(\d+)/i);
+      const amountMatch = text.match(/Estimated\s*Value\s*[:\-]?\s*([0-9,]+)/i);
+      const divisionMatch = text.match(/Division\s*:? ?([A-Za-z0-9\-]+)/i);
+      const briefMatch = text.match(/Brief Description[:\-]?\s*(.+?)(?= Estimate| PR|$)/i);
 
-        res.json({
-            prNo: prNoMatch ? prNoMatch[1] : "",
-            workName: briefMatch ? briefMatch[1] : "",
-            amount: amountMatch ? amountMatch[1].replace(/,/g, "") : "",
-            subDivision: divisionMatch ? divisionMatch[1] : "",
-            recordType: "PR"
-        });
-
+      res.json({
+        prNo: prNoMatch ? prNoMatch[1] : "",
+        workName: briefMatch ? briefMatch[1] : "",
+        amount: amountMatch ? amountMatch[1].replace(/,/g, "") : "",
+        subDivision: divisionMatch ? divisionMatch[1] : "",
+        recordType: "PR",
+      });
     } catch (err) {
-        console.error("PDF extract error:", err);
-        res.status(500).json({ error: "Failed to extract PDF" });
+      console.error("PDF extract error:", err);
+      res.status(500).json({ error: "Failed to extract PDF" });
     }
-});
-
+  }
+);
 
 // =================================================================
-// DAILY PROGRESS ROUTES
+// DAILY PROGRESS ROUTES (Supabase instead of daily.json)
 // =================================================================
 
+// Get all snapshots
 app.get("/daily-progress", async (req, res) => {
-    res.json(await readJsonFile(dailyFile, []));
+  try {
+    const { data, error } = await supabase
+      .from("daily_progress")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+
+    res.json(data.map(mapDailyRow));
+  } catch (err) {
+    console.error("GET /daily-progress error:", err);
+    res.status(500).json({ error: "Failed to load daily progress" });
+  }
 });
 
+// Get one snapshot
 app.get("/daily-progress/:id", async (req, res) => {
-    const id = Number(req.params.id);
-    const snaps = await readJsonFile(dailyFile, []);
-    const snap = snaps.find(s => s.id === id);
-    if (!snap) return res.status(404).json({ error: "Not found" });
-    res.json(snap);
+  const id = Number(req.params.id);
+  try {
+    const { data, error } = await supabase
+      .from("daily_progress")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (error) throw error;
+    if (!data) return res.status(404).json({ error: "Not found" });
+
+    res.json(mapDailyRow(data));
+  } catch (err) {
+    console.error("GET /daily-progress/:id error:", err);
+    res.status(500).json({ error: "Failed to load snapshot" });
+  }
 });
 
+// Create / update snapshot
 app.post("/daily-progress", authenticateToken, async (req, res) => {
-    const { id, date, tableHTML, rowCount } = req.body;
+  const { id, date, tableHTML, rowCount } = req.body;
 
-    let snaps = await readJsonFile(dailyFile, []);
-
+  try {
     if (id) {
-        const index = snaps.findIndex(s => s.id == id);
-        if (index !== -1) {
-            snaps[index] = { ...snaps[index], date, tableHTML, rowCount };
-        }
+      const { error } = await supabase
+        .from("daily_progress")
+        .update({
+          date,
+          table_html: tableHTML,
+          row_count: rowCount,
+        })
+        .eq("id", id);
+
+      if (error) throw error;
     } else {
-        snaps.push({ id: Date.now(), date, tableHTML, rowCount });
+      const { error } = await supabase.from("daily_progress").insert({
+        date,
+        table_html: tableHTML,
+        row_count: rowCount,
+      });
+      if (error) throw error;
     }
 
-    await safeWriteJson(dailyFile, snaps);
-    res.json({ success: true });
+    res.json({ success: true, message: "Snapshot saved" });
+  } catch (err) {
+    console.error("POST /daily-progress error:", err);
+    res.status(500).json({ error: "Failed to save snapshot" });
+  }
 });
 
+// Delete snapshot
 app.delete("/daily-progress/:id", authenticateToken, async (req, res) => {
-    let snaps = await readJsonFile(dailyFile, []);
-    const id = Number(req.params.id);
+  const id = Number(req.params.id);
+  try {
+    const { error } = await supabase
+      .from("daily_progress")
+      .delete()
+      .eq("id", id);
 
-    snaps = snaps.filter(s => s.id !== id);
-    await safeWriteJson(dailyFile, snaps);
-
+    if (error) throw error;
     res.json({ success: true });
+  } catch (err) {
+    console.error("DELETE /daily-progress/:id error:", err);
+    res.status(500).json({ error: "Failed to delete snapshot" });
+  }
 });
 
 // =================================================================
-// USER AUTH
+// USER AUTH (store users in Supabase table, JWT handled here)
 // =================================================================
 
 let pendingVerifications = {};
 
 app.post("/register-send-otp", async (req, res) => {
-    try {
-        const { email, password, inviteCode } = req.body;
+  try {
+    const { email, password, inviteCode } = req.body;
 
-        if (!email || !password || inviteCode !== "810632")
-            return res.status(400).json({ message: "Invalid data" });
-
-        const users = await readJsonFile(USERS_FILE, []);
-        if (users.find(u => u.username === email))
-            return res.status(409).json({ message: "Already registered" });
-
-        const otp = Math.floor(100000 + Math.random() * 900000).toString();
-        const passwordHash = await bcrypt.hash(password, 10);
-
-        pendingVerifications[email] = {
-            email,
-            passwordHash,
-            otp,
-            expires: Date.now() + 10 * 60 * 1000
-        };
-
-        await transporter.sendMail({
-            from: EMAIL_USER,
-            to: email,
-            subject: "Verification Code",
-            text: `Your OTP is ${otp}`
-        });
-
-        res.json({ message: "OTP sent" });
-
-    } catch (err) {
-        res.status(500).json({ message: "Email sending failed", error: err.toString() });
+    if (!email || !password || inviteCode !== "810632") {
+      return res.status(400).json({ message: "Invalid data" });
     }
+
+    // Check if user already exists
+    const { data: existing, error: checkError } = await supabase
+      .from("users")
+      .select("id")
+      .eq("email", email);
+
+    if (checkError) throw checkError;
+    if (existing && existing.length > 0) {
+      return res.status(409).json({ message: "Already registered" });
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    pendingVerifications[email] = {
+      email,
+      passwordHash,
+      otp,
+      expires: Date.now() + 10 * 60 * 1000,
+    };
+
+    await transporter.sendMail({
+      from: EMAIL_USER,
+      to: email,
+      subject: "Verification Code",
+      text: `Your OTP is ${otp}`,
+    });
+
+    res.json({ message: "OTP sent" });
+  } catch (err) {
+    console.error("register-send-otp error:", err);
+    res
+      .status(500)
+      .json({ message: "Email sending or DB check failed", error: err.toString() });
+  }
 });
 
 app.post("/register-verify", async (req, res) => {
-    const { email, otp } = req.body;
+  const { email, otp } = req.body;
 
+  try {
     const pending = pendingVerifications[email];
-    if (!pending || pending.otp !== otp)
-        return res.status(400).json({ message: "Invalid OTP" });
+    if (!pending || pending.otp !== otp || pending.expires < Date.now()) {
+      return res.status(400).json({ message: "Invalid or expired OTP" });
+    }
 
-    const users = await readJsonFile(USERS_FILE, []);
-    users.push({ username: email, passwordHash: pending.passwordHash });
+    const { error } = await supabase.from("users").insert({
+      email,
+      password_hash: pending.passwordHash,
+    });
 
-    await safeWriteJson(USERS_FILE, users);
+    if (error) throw error;
+
     delete pendingVerifications[email];
 
     res.json({ message: "Registration complete" });
+  } catch (err) {
+    console.error("register-verify error:", err);
+    res.status(500).json({ message: "Registration failed", error: err.toString() });
+  }
 });
 
 app.post("/login", async (req, res) => {
-    const { username, password } = req.body;
+  const { username, password } = req.body; // username is email
 
-    const users = await readJsonFile(USERS_FILE, []);
-    const user = users.find(u => u.username === username);
+  try {
+    const { data, error } = await supabase
+      .from("users")
+      .select("*")
+      .eq("email", username)
+      .limit(1);
 
-    if (!user || !(await bcrypt.compare(password, user.passwordHash)))
-        return res.status(401).json({ message: "Invalid login" });
+    if (error) throw error;
+
+    const user = data && data[0];
+    if (!user) {
+      return res.status(401).json({ message: "Invalid login" });
+    }
+
+    const passwordMatch = await bcrypt.compare(password, user.password_hash);
+    if (!passwordMatch) {
+      return res.status(401).json({ message: "Invalid login" });
+    }
 
     const token = jwt.sign({ username }, JWT_SECRET, { expiresIn: "1h" });
 
     res.json({ message: "Login success", token });
+  } catch (err) {
+    console.error("login error:", err);
+    res.status(500).json({ message: "Login failed", error: err.toString() });
+  }
 });
 
 // =================================================================
@@ -400,10 +610,5 @@ app.use(express.static(__dirname, { extensions: ["html"] }));
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-    console.log(`✅ Server running on port ${PORT}`);
+  console.log(`✅ Server running on port ${PORT}`);
 });
-
-
-
-
-
