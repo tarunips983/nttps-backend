@@ -17,6 +17,7 @@
     "mime-types": "^2.1.35",
     "dotenv": "^16.3.1",
     "cloudinary": "^1.41.0",
-    "streamifier": "^0.1.1"
+    "streamifier": "^0.1.1",
+    "@supabase/supabase-js": "^2.42.0"
   }
 }
