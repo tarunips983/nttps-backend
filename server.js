@@ -569,33 +569,34 @@ app.post("/register-verify", async (req, res) => {
 });
 
 app.post("/login", async (req, res) => {
-  const { username, password } = req.body; // username is email
-
   try {
-    const { data, error } = await supabase
+    const { email, password } = req.body;
+
+    // 1. Fetch user from Supabase
+    const { data: users, error } = await supabase
       .from("users")
       .select("*")
-      .eq("email", username)
-      .limit(1);
+      .eq("email", email)
+      .single();
 
-    if (error) throw error;
-
-    const user = data && data[0];
-    if (!user) {
-      return res.status(401).json({ message: "Invalid login" });
+    if (error || !users) {
+      return res.status(401).json({ message: "Invalid email or password." });
     }
 
-    const passwordMatch = await bcrypt.compare(password, user.password_hash);
-    if (!passwordMatch) {
-      return res.status(401).json({ message: "Invalid login" });
+    // 2. Compare password with bcrypt
+    const bcrypt = require("bcryptjs");
+    const isMatch = await bcrypt.compare(password, users.password_hash);
+
+    if (!isMatch) {
+      return res.status(401).json({ message: "Incorrect password." });
     }
 
-    const token = jwt.sign({ username }, JWT_SECRET, { expiresIn: "1h" });
+    // 3. Success
+    res.json({ message: "Login successful" });
 
-    res.json({ message: "Login success", token });
   } catch (err) {
-    console.error("login error:", err);
-    res.status(500).json({ message: "Login failed", error: err.toString() });
+    console.error("Login error:", err);
+    res.status(500).json({ message: "Server error" });
   }
 });
 
@@ -612,4 +613,5 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
