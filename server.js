@@ -448,32 +448,37 @@ app.post("/daily-progress", authenticateToken, async (req, res) => {
   const { id, date, tableHTML, rowCount } = req.body;
 
   try {
+    const payload = {
+      date,
+      table_html: tableHTML,
+      row_count: rowCount,
+    };
+
     if (id) {
+      // UPDATE
       const { error } = await supabase
         .from("daily_progress")
-        .update({
-          date,
-          table_html: tableHTML,
-          row_count: rowCount,
-        })
+        .update(payload)
         .eq("id", id);
 
       if (error) throw error;
     } else {
-      const { error } = await supabase.from("daily_progress").insert({
-        date,
-        table_html: tableHTML,
-        row_count: rowCount,
-      });
+      // INSERT
+      const { error } = await supabase
+        .from("daily_progress")
+        .insert(payload);
+
       if (error) throw error;
     }
 
     res.json({ success: true, message: "Snapshot saved" });
+
   } catch (err) {
     console.error("POST /daily-progress error:", err);
     res.status(500).json({ error: "Failed to save snapshot" });
   }
 });
+
 
 // Delete snapshot
 app.delete("/daily-progress/:id", authenticateToken, async (req, res) => {
@@ -613,6 +618,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
