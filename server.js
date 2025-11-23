@@ -496,6 +496,54 @@ app.delete("/daily-progress/:id", authenticateToken, async (req, res) => {
     res.status(500).json({ error: "Failed to delete snapshot" });
   }
 });
+// =================================================================
+// DAILY PROGRESS - BATCH IMPORT (Excel upload)
+// =================================================================
+app.post("/daily-progress/batch-import", authenticateToken, async (req, res) => {
+  try {
+    const snapshots = req.body;  // array of { date, tableHTML, rowCount }
+
+    if (!Array.isArray(snapshots)) {
+      return res.status(400).json({ error: "Invalid data format" });
+    }
+
+    for (const snap of snapshots) {
+      // check existing snapshot for date
+      const { data: existing } = await supabase
+        .from("daily_progress")
+        .select("*")
+        .eq("date", snap.date)
+        .maybeSingle();
+
+      if (existing) {
+        // update
+        await supabase
+          .from("daily_progress")
+          .update({
+            table_html: snap.tableHTML,
+            row_count: snap.rowCount
+          })
+          .eq("id", existing.id);
+      } else {
+        // insert new
+        await supabase
+          .from("daily_progress")
+          .insert({
+            date: snap.date,
+            table_html: snap.tableHTML,
+            row_count: snap.rowCount
+          });
+      }
+    }
+
+    res.json({ success: true, message: "Batch import completed!" });
+
+  } catch (err) {
+    console.error("Batch import error:", err);
+    res.status(500).json({ error: "Batch import failed" });
+  }
+});
+
 
 // =================================================================
 // USER AUTH (store users in Supabase table, JWT handled here)
@@ -625,6 +673,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
