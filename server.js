@@ -577,7 +577,6 @@ app.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // 1. Fetch user
     const { data: user, error } = await supabase
       .from("users")
       .select("*")
@@ -588,20 +587,18 @@ app.post("/login", async (req, res) => {
       return res.status(401).json({ message: "Invalid email or password." });
     }
 
-    // 2. Compare password
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
       return res.status(401).json({ message: "Incorrect password." });
     }
 
-    // 3. CREATE JWT TOKEN 💥💥💥
+    // 🔥 GENERATE JWT TOKEN
     const token = jwt.sign(
-      { id: user.id, email: user.email },
+      { userId: user.id, email: user.email },
       JWT_SECRET,
-      { expiresIn: "12h" }
+      { expiresIn: "7d" }
     );
 
-    // 4. Send token to frontend
     return res.json({
       message: "Login successful",
       token: token
@@ -612,6 +609,7 @@ app.post("/login", async (req, res) => {
     return res.status(500).json({ message: "Server error" });
   }
 });
+
 
 // =================================================================
 // STATIC FILES
@@ -626,6 +624,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
