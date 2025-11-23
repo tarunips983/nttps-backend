@@ -573,30 +573,30 @@ app.post("/login", async (req, res) => {
     const { email, password } = req.body;
 
     // 1. Fetch user from Supabase
-    const { data: users, error } = await supabase
+    const { data: user, error } = await supabase
       .from("users")
       .select("*")
       .eq("email", email)
       .single();
 
-    if (error || !users) {
+    if (error || !user) {
       return res.status(401).json({ message: "Invalid email or password." });
     }
 
-    // 2. Compare password with bcrypt
-    const bcrypt = require("bcryptjs");
-    const isMatch = await bcrypt.compare(password, users.password_hash);
+    // 2. Compare password correctly
+    const bcrypt = require("bcrypt");
+    const isMatch = await bcrypt.compare(password, user.password_hash);
 
     if (!isMatch) {
       return res.status(401).json({ message: "Incorrect password." });
     }
 
     // 3. Success
-    res.json({ message: "Login successful" });
+    return res.json({ message: "Login successful" });
 
   } catch (err) {
     console.error("Login error:", err);
-    res.status(500).json({ message: "Server error" });
+    return res.status(500).json({ message: "Server error" });
   }
 });
 
@@ -613,5 +613,6 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
