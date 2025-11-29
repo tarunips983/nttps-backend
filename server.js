@@ -669,10 +669,10 @@ app.use(express.static(__dirname, { extensions: ["html"] }));
 // CL BIO DATA ROUTES (with Supabase Storage Upload)
 // =================================================================
 
-const CL_BUCKET = "cl-photos";
+const CL_BUCKET = "cl-photo_urls";
 
 // SAVE / UPDATE CL
-app.post("/cl", authenticateToken, uploadInMemory.single("photo"), async (req, res) => {
+app.post("/cl", authenticateToken, uploadInMemory.single("photo_url"), async (req, res) => {
   try {
     const {
       id,
@@ -687,12 +687,12 @@ app.post("/cl", authenticateToken, uploadInMemory.single("photo"), async (req, r
       wages,
       nominee,
       relation,
-      photoUrl // existing photo path
+      photo_urlUrl // existing photo_url path
     } = req.body;
 
-    let newPhotoUrl = null;
+    let newphoto_urlUrl = null;
 
-    // Upload new photo only if file exists
+    // Upload new photo_url only if file exists
     if (req.file) {
       const ext = path.extname(req.file.originalname) || ".jpg";
 
@@ -712,10 +712,10 @@ app.post("/cl", authenticateToken, uploadInMemory.single("photo"), async (req, r
         .from(CL_BUCKET)
         .getPublicUrl(uploadData.path);
 
-      newPhotoUrl = urlData.publicUrl;
+      newphoto_urlUrl = urlData.publicUrl;
     }
 
-    const finalPhoto = newPhotoUrl || photoUrl || null;
+    const finalphoto_url = newphoto_urlUrl || photo_urlUrl || null;
 
     const payload = {
       name,
@@ -729,7 +729,7 @@ app.post("/cl", authenticateToken, uploadInMemory.single("photo"), async (req, r
       wages,
       nominee,
       relation,
-      photo: finalPhoto
+      photo_url: finalphoto_url
     };
 
     let result;
@@ -792,6 +792,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
