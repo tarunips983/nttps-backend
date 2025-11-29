@@ -669,94 +669,96 @@ app.use(express.static(__dirname, { extensions: ["html"] }));
 // CL BIO DATA ROUTES (with Supabase Storage Upload)
 // =================================================================
 
-const CL_BUCKET = "cl-photo_urls";
+const CL_BUCKET = "cl-photos";   // FIXED BUCKET NAME
 
-// SAVE / UPDATE CL
-app.post("/cl", authenticateToken, uploadInMemory.single("photo_url"), async (req, res) => {
-  try {
-    const {
-      id,
-      name,
-      gender,
-      aadhar,
-      phone,
-      station,
-      division,
-      doj,
-      dob,
-      wages,
-      nominee,
-      relation,
-      photo_urlUrl // existing photo_url path
-    } = req.body;
+app.post(
+  "/cl",
+  authenticateToken,
+  uploadInMemory.single("photo"),   // FIXED FIELD NAME
+  async (req, res) => {
+    try {
+      const {
+        id,
+        name,
+        gender,
+        aadhar,
+        phone,
+        station,
+        division,
+        doj,
+        dob,
+        wages,
+        nominee,
+        relation,
+        photo_url // existing URL if editing
+      } = req.body;
 
-    let newphoto_urlUrl = null;
+      let newPhotoUrl = null;
 
-    // Upload new photo_url only if file exists
-    if (req.file) {
-      const ext = path.extname(req.file.originalname) || ".jpg";
+      if (req.file) {
+        const ext = path.extname(req.file.originalname) || ".jpg";
+        const uniqueName = Date.now() + "_" + Math.random().toString(36).slice(2) + ext;
 
-      const uniqueName =
-        Date.now() + "_" + Math.random().toString(36).slice(2) + ext;
+        const { data: uploadData, error: uploadErr } = await supabase.storage
+          .from(CL_BUCKET)
+          .upload(uniqueName, req.file.buffer, {
+            contentType: req.file.mimetype,
+          });
 
-      const { data: uploadData, error: uploadErr } = await supabase.storage
-        .from(CL_BUCKET)
-        .upload(uniqueName, req.file.buffer, {
-          contentType: req.file.mimetype,
-          upsert: false,
-        });
+        if (uploadErr) throw uploadErr;
 
-      if (uploadErr) throw uploadErr;
+        const { data: urlData } = supabase.storage
+          .from(CL_BUCKET)
+          .getPublicUrl(uploadData.path);
 
-      const { data: urlData } = supabase.storage
-        .from(CL_BUCKET)
-        .getPublicUrl(uploadData.path);
+        newPhotoUrl = urlData.publicUrl;
+      }
 
-      newphoto_urlUrl = urlData.publicUrl;
+      const finalPhoto = newPhotoUrl || photo_url || null;
+
+      const payload = {
+        name,
+        gender,
+        aadhar,
+        phone,
+        station,
+        division,
+        doj,
+        dob,
+        wages,
+        nominee,
+        relation,
+        photo_url: finalPhoto
+      };
+
+      let result;
+
+      if (id) {
+        const { data, error } = await supabase
+          .from("cl_biodata")
+          .update(payload)
+          .eq("id", id)
+          .select("*");
+        if (error) throw error;
+        result = data[0];
+      } else {
+        const { data, error } = await supabase
+          .from("cl_biodata")
+          .insert(payload)
+          .select("*");
+        if (error) throw error;
+        result = data[0];
+      }
+
+      res.json({ success: true, cl: result });
+
+    } catch (err) {
+      console.error("CL SAVE ERROR:", err);
+      res.status(500).json({ error: "Failed to save CL" });
     }
-
-    const finalphoto_url = newphoto_urlUrl || photo_urlUrl || null;
-
-    const payload = {
-      name,
-      gender,
-      aadhar,
-      phone,
-      station,
-      division,
-      doj,
-      dob,
-      wages,
-      nominee,
-      relation,
-      photo_url: finalphoto_url
-    };
-
-    let result;
-
-    if (id) {
-      // update
-      const { data, error } = await supabase
-        .from("cl_biodata")
-        .update(payload)
-        .eq("id", id)
-        .select("*");
-      if (error) throw error;
-      result = data[0];
-    } else {
-      // insert
-      const { data, error } = await supabase.from("cl_biodata").insert(payload).select("*");
-      if (error) throw error;
-      result = data[0];
-    }
-
-    res.json({ success: true, cl: result });
-
-  } catch (err) {
-    console.error("CL SAVE ERROR:", err);
-    res.status(500).json({ error: "Failed to save CL" });
   }
-});
+);
+
 
 // GET all CL data
 app.get("/cl", async (req, res) => {
@@ -792,6 +794,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
