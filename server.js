@@ -666,6 +666,125 @@ app.post("/login", async (req, res) => {
 app.use(express.static(__dirname, { extensions: ["html"] }));
 
 // =================================================================
+// CL BIO DATA ROUTES (with Supabase Storage Upload)
+// =================================================================
+
+const CL_BUCKET = "cl-photos";
+
+// SAVE / UPDATE CL
+app.post("/cl", authenticateToken, uploadInMemory.single("photo"), async (req, res) => {
+  try {
+    const {
+      id,
+      name,
+      gender,
+      aadhar,
+      phone,
+      station,
+      division,
+      doj,
+      dob,
+      wages,
+      nominee,
+      relation,
+      photoUrl // existing photo path
+    } = req.body;
+
+    let newPhotoUrl = null;
+
+    // Upload new photo only if file exists
+    if (req.file) {
+      const ext = path.extname(req.file.originalname) || ".jpg";
+
+      const uniqueName =
+        Date.now() + "_" + Math.random().toString(36).slice(2) + ext;
+
+      const { data: uploadData, error: uploadErr } = await supabase.storage
+        .from(CL_BUCKET)
+        .upload(uniqueName, req.file.buffer, {
+          contentType: req.file.mimetype,
+          upsert: false,
+        });
+
+      if (uploadErr) throw uploadErr;
+
+      const { data: urlData } = supabase.storage
+        .from(CL_BUCKET)
+        .getPublicUrl(uploadData.path);
+
+      newPhotoUrl = urlData.publicUrl;
+    }
+
+    const finalPhoto = newPhotoUrl || photoUrl || null;
+
+    const payload = {
+      name,
+      gender,
+      aadhar,
+      phone,
+      station,
+      division,
+      doj,
+      dob,
+      wages,
+      nominee,
+      relation,
+      photo: finalPhoto
+    };
+
+    let result;
+
+    if (id) {
+      // update
+      const { data, error } = await supabase
+        .from("cl_data")
+        .update(payload)
+        .eq("id", id)
+        .select("*");
+      if (error) throw error;
+      result = data[0];
+    } else {
+      // insert
+      const { data, error } = await supabase.from("cl_data").insert(payload).select("*");
+      if (error) throw error;
+      result = data[0];
+    }
+
+    res.json({ success: true, cl: result });
+
+  } catch (err) {
+    console.error("CL SAVE ERROR:", err);
+    res.status(500).json({ error: "Failed to save CL" });
+  }
+});
+
+// GET all CL data
+app.get("/cl", async (req, res) => {
+  try {
+    const { data, error } = await supabase.from("cl_data").select("*").order("id");
+    if (error) throw error;
+    res.json(data);
+  } catch (err) {
+    console.error("GET /cl ERROR:", err);
+    res.status(500).json({ error: "Failed to load CL data" });
+  }
+});
+
+// DELETE CL
+app.delete("/cl/:id", authenticateToken, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const { error } = await supabase.from("cl_data").delete().eq("id", id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err) {
+    console.error("DELETE CL ERROR:", err);
+    res.status(500).json({ error: "Failed to delete CL" });
+  }
+});
+
+
+// =================================================================
 // START SERVER
 // =================================================================
 const PORT = process.env.PORT || 3000;
@@ -673,6 +792,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
