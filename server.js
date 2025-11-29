@@ -737,7 +737,7 @@ app.post("/cl", authenticateToken, uploadInMemory.single("photo"), async (req, r
     if (id) {
       // update
       const { data, error } = await supabase
-        .from("cl_data")
+        .from("cl_biodata")
         .update(payload)
         .eq("id", id)
         .select("*");
@@ -745,7 +745,7 @@ app.post("/cl", authenticateToken, uploadInMemory.single("photo"), async (req, r
       result = data[0];
     } else {
       // insert
-      const { data, error } = await supabase.from("cl_data").insert(payload).select("*");
+      const { data, error } = await supabase.from("cl_biodata").insert(payload).select("*");
       if (error) throw error;
       result = data[0];
     }
@@ -761,7 +761,7 @@ app.post("/cl", authenticateToken, uploadInMemory.single("photo"), async (req, r
 // GET all CL data
 app.get("/cl", async (req, res) => {
   try {
-    const { data, error } = await supabase.from("cl_data").select("*").order("id");
+    const { data, error } = await supabase.from("cl_biodata").select("*").order("id");
     if (error) throw error;
     res.json(data);
   } catch (err) {
@@ -774,7 +774,7 @@ app.get("/cl", async (req, res) => {
 app.delete("/cl/:id", authenticateToken, async (req, res) => {
   try {
     const id = Number(req.params.id);
-    const { error } = await supabase.from("cl_data").delete().eq("id", id);
+    const { error } = await supabase.from("cl_biodata").delete().eq("id", id);
     if (error) throw error;
     res.json({ success: true });
   } catch (err) {
@@ -792,6 +792,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
