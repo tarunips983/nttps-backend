@@ -230,9 +230,7 @@ app.post(
 
       const finalPdfUrl = newPdfUrl || pdfPath || null;
 
-      if (!id && !finalPdfUrl) {
-        return res.status(400).json({ error: "PDF required for new records" });
-      }
+    
 
       // ---------------------------------
       // UPDATE
@@ -827,6 +825,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
