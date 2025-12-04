@@ -169,7 +169,10 @@ app.get("/records/trash", authenticateToken, async (req, res) => {
 // ---------------------------------------------------------
 // PDF UPLOAD to Supabase Storage (replaces Cloudinary + JSON)
 // ---------------------------------------------------------
-const PDF_BUCKET = "pdfs"; // make sure this bucket exists in Supabase
+// ---------------------------------------------------------
+// PDF UPLOAD to Supabase Storage
+// ---------------------------------------------------------
+const PDF_BUCKET = "pdfs";
 
 app.post(
   "/upload",
@@ -178,7 +181,7 @@ app.post(
   async (req, res) => {
     try {
       const {
-        id, // optional for edit
+        id,
         workName,
         prNo,
         subDivision,
@@ -186,134 +189,126 @@ app.post(
         amount,
         sendTo,
         pdfPath,
-         // NEW from front-end
-  prDate,
-  budgetHead,
-  poNo,
-  prDate2,
-  firmName,
-  divisionLabel,
-  pageNo,
-  remarks,
-  highValueSpares
-} = req.body;// old path (if editing without new file)
 
+        // new fields
+        prDate,
+        budgetHead,
+        poNo,
+        prDate2,
+        firmName,
+        divisionLabel,
+        pageNo,
+        remarks,
+        highValueSpares
+      } = req.body;
 
       let newPdfUrl = null;
 
-      // If a file is uploaded, store it in Supabase
+      // upload PDF
       if (req.files && req.files.length > 0) {
-        const file = req.files[0]; // you currently use only one PDF per record
+        const file = req.files[0];
 
-        const ext =
-          path.extname(file.originalname) ||
-          (file.mimetype === "application/pdf" ? ".pdf" : "");
+        const ext = path.extname(file.originalname) || ".pdf";
         const uniqueName =
-          Date.now() +
-          "_" +
-          Math.random().toString(36).slice(2) +
-          ext.replace(/[^a-zA-Z0-9.]/g, "_");
+          Date.now() + "_" + Math.random().toString(36).slice(2) + ext;
 
-        const { data: uploadData, error: uploadError } = await supabase
-          .storage
-          .from(PDF_BUCKET)
-          .upload(uniqueName, file.buffer, {
+        const { data: uploadData, error: uploadError } =
+          await supabase.storage.from(PDF_BUCKET).upload(uniqueName, file.buffer, {
             contentType: file.mimetype || "application/pdf",
             upsert: false,
           });
 
         if (uploadError) {
-          console.error("Supabase upload error:", uploadError);
+          console.error("Upload Error:", uploadError);
           return res.status(500).json({ error: "Failed to upload PDF" });
         }
 
-        const { data: publicUrlData } = supabase
-          .storage
+        newPdfUrl = supabase.storage
           .from(PDF_BUCKET)
-          .getPublicUrl(uploadData.path);
-
-        newPdfUrl = publicUrlData.publicUrl;
+          .getPublicUrl(uploadData.path).data.publicUrl;
       }
 
-      // If editing but no new file, keep old pdfPath
       const finalPdfUrl = newPdfUrl || pdfPath || null;
 
       if (!id && !finalPdfUrl) {
-        return res.status(400).json({ error: "PDF file is required for new records" });
+        return res.status(400).json({ error: "PDF required for new records" });
       }
 
+      // ---------------------------------
+      // UPDATE
+      // ---------------------------------
       if (id) {
-  const updatePayload = {
-    work_name: workName || null,
-    pr_no: prNo || null,
-    sub_division: subDivision || null,
-    record_type: recordType || null,
-    amount: amount || null,
-    send_to: sendTo || null,
-    pr_date: prDate || null,
-    budget_head: budgetHead || null,
-    po_no: poNo || null,
-    pr_date2: prDate2 || null,
-    firm_name: firmName || null,
-    division_label: divisionLabel || null,
-    page_no: pageNo || null,
-    remarks: remarks || null,
-    high_value_spares: highValueSpares || null,
-  };
+        const updatePayload = {
+          work_name: workName || null,
+          pr_no: prNo || null,
+          sub_division: subDivision || null,
+          record_type: recordType || null,
+          amount: amount || null,
+          send_to: sendTo || null,
 
-  // 🔥 only override when we actually have a URL
-  if (finalPdfUrl) {
-    updatePayload.pdf_url = finalPdfUrl;
+          pr_date: prDate || null,
+          budget_head: budgetHead || null,
+          po_no: poNo || null,
+          pr_date2: prDate2 || null,
+          firm_name: firmName || null,
+          division_label: divisionLabel || null,
+          page_no: pageNo || null,
+          remarks: remarks || null,
+          high_value_spares: highValueSpares || null,
+        };
+
+        if (newPdfUrl) updatePayload.pdf_url = newPdfUrl;
+
+        const { data, error } = await supabase
+          .from("records")
+          .update(updatePayload)
+          .eq("id", Number(id))
+          .select("*");
+
+        if (error) throw error;
+
+        return res.json({ success: true, record: mapRecordRow(data[0]) });
+      }
+
+      // ---------------------------------
+      // INSERT
+      // ---------------------------------
+      const insertPayload = {
+        work_name: workName || null,
+        pr_no: prNo || null,
+        sub_division: subDivision || null,
+        record_type: recordType || "Other Record",
+        amount: amount || 0,
+        send_to: sendTo || null,
+        pdf_url: finalPdfUrl,
+        is_deleted: false,
+
+        pr_date: prDate || null,
+        budget_head: budgetHead || null,
+        po_no: poNo || null,
+        pr_date2: prDate2 || null,
+        firm_name: firmName || null,
+        division_label: divisionLabel || null,
+        page_no: pageNo || null,
+        remarks: remarks || null,
+        high_value_spares: highValueSpares || null,
+      };
+
+      const { data, error } = await supabase
+        .from("records")
+        .insert(insertPayload)
+        .select("*");
+
+      if (error) throw error;
+
+      return res.json({ success: true, record: mapRecordRow(data[0]) });
+
+    } catch (err) {
+      console.error("UPLOAD ROUTE ERROR:", err);
+      res.status(500).json({ error: "Upload failed" });
+    }
   }
-
-  const { data, error } = await supabase
-    .from("records")
-    .update(updatePayload)
-    .eq("id", Number(id))
-    .select("*");
-
-  if (error) throw error;
-
-  return res.json({
-    success: true,
-    record: mapRecordRow(data[0]),
-  });
-} else {
-  // INSERT new record
-  const insertPayload = {
-    work_name: workName || null,
-    pr_no: prNo || null,
-    sub_division: subDivision || null,
-    record_type: recordType || "Other Record",
-    amount: amount || 0,
-    send_to: sendTo || null,
-    pdf_url: finalPdfUrl,
-    is_deleted: false,
-
-    // NEW FIELDS
-    pr_date: prDate || null,
-    budget_head: budgetHead || null,
-    po_no: poNo || null,
-    pr_date2: prDate2 || null,
-    firm_name: firmName || null,
-    division_label: divisionLabel || null,
-    page_no: pageNo || null,
-    remarks: remarks || null,
-    high_value_spares: highValueSpares || null,
-  };
-
-  const { data, error } = await supabase
-    .from("records")
-    .insert(insertPayload)
-    .select("*");
-
-  if (error) throw error;
-
-  return res.json({
-    success: true,
-    record: mapRecordRow(data[0]),
-  });
-}
+); // ←← THIS WAS MISSING
 
 // Move to trash
 app.delete("/records/:id", authenticateToken, async (req, res) => {
@@ -832,6 +827,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
