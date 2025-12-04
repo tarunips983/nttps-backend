@@ -95,6 +95,16 @@ function mapRecordRow(row) {
     pdfPath: row.pdf_url,
     isDeleted: row.is_deleted,
     createdAt: row.created_at,
+    // NEW FIELDS
+    prDate: row.pr_date,
+    budgetHead: row.budget_head,
+    poNo: row.po_no,
+    prDate2: row.pr_date2,
+    firmName: row.firm_name,
+    divisionLabel: row.division_label,
+    pageNo: row.page_no,
+    remarks: row.remarks,
+    highValueSpares: row.high_value_spares,
   };
 }
 
@@ -175,8 +185,19 @@ app.post(
         recordType,
         amount,
         sendTo,
-        pdfPath, // old path (if editing without new file)
-      } = req.body;
+        pdfPath,
+         // NEW from front-end
+  prDate,
+  budgetHead,
+  poNo,
+  prDate2,
+  firmName,
+  divisionLabel,
+  pageNo,
+  remarks,
+  highValueSpares
+} = req.body;// old path (if editing without new file)
+
 
       let newPdfUrl = null;
 
@@ -224,13 +245,24 @@ app.post(
       if (id) {
         // UPDATE existing record
         const updatePayload = {
-          work_name: workName || null,
-          pr_no: prNo || null,
-          sub_division: subDivision || null,
-          record_type: recordType || null,
-          amount: amount || null,
-          send_to: sendTo || null,
-        };
+  work_name: workName || null,
+  pr_no: prNo || null,
+  sub_division: subDivision || null,
+  record_type: recordType || null,
+  amount: amount || null,
+  send_to: sendTo || null,
+  pdf_url: finalPdfUrl,
+  pr_date: prDate || null,
+  budget_head: budgetHead || null,
+  po_no: poNo || null,
+  pr_date2: prDate2 || null,
+  firm_name: firmName || null,
+  division_label: divisionLabel || null,
+  page_no: pageNo || null,
+  remarks: remarks || null,
+  high_value_spares: highValueSpares || null,
+};
+
         if (finalPdfUrl) {
           updatePayload.pdf_url = finalPdfUrl;
         }
@@ -794,6 +826,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
