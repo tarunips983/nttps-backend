@@ -243,71 +243,77 @@ app.post(
       }
 
       if (id) {
-        // UPDATE existing record
-        const updatePayload = {
-  work_name: workName || null,
-  pr_no: prNo || null,
-  sub_division: subDivision || null,
-  record_type: recordType || null,
-  amount: amount || null,
-  send_to: sendTo || null,
-  pdf_url: finalPdfUrl,
-  pr_date: prDate || null,
-  budget_head: budgetHead || null,
-  po_no: poNo || null,
-  pr_date2: prDate2 || null,
-  firm_name: firmName || null,
-  division_label: divisionLabel || null,
-  page_no: pageNo || null,
-  remarks: remarks || null,
-  high_value_spares: highValueSpares || null,
-};
+  const updatePayload = {
+    work_name: workName || null,
+    pr_no: prNo || null,
+    sub_division: subDivision || null,
+    record_type: recordType || null,
+    amount: amount || null,
+    send_to: sendTo || null,
+    pr_date: prDate || null,
+    budget_head: budgetHead || null,
+    po_no: poNo || null,
+    pr_date2: prDate2 || null,
+    firm_name: firmName || null,
+    division_label: divisionLabel || null,
+    page_no: pageNo || null,
+    remarks: remarks || null,
+    high_value_spares: highValueSpares || null,
+  };
 
-        if (finalPdfUrl) {
-          updatePayload.pdf_url = finalPdfUrl;
-        }
-
-        const { data, error } = await supabase
-          .from("records")
-          .update(updatePayload)
-          .eq("id", Number(id))
-          .select("*");
-
-        if (error) throw error;
-
-        return res.json({
-          success: true,
-          record: mapRecordRow(data[0]),
-        });
-      } else {
-        // INSERT new record
-        const { data, error } = await supabase
-          .from("records")
-          .insert({
-            work_name: workName || null,
-            pr_no: prNo || null,
-            sub_division: subDivision || null,
-            record_type: recordType || "Other Record",
-            amount: amount || 0,
-            send_to: sendTo || null,
-            pdf_url: finalPdfUrl,
-            is_deleted: false,
-          })
-          .select("*");
-
-        if (error) throw error;
-
-        return res.json({
-          success: true,
-          record: mapRecordRow(data[0]),
-        });
-      }
-    } catch (err) {
-      console.error("UPLOAD ERROR:", err);
-      res.status(500).json({ error: "Upload failed" });
-    }
+  // 🔥 only override when we actually have a URL
+  if (finalPdfUrl) {
+    updatePayload.pdf_url = finalPdfUrl;
   }
-);
+
+  const { data, error } = await supabase
+    .from("records")
+    .update(updatePayload)
+    .eq("id", Number(id))
+    .select("*");
+
+  if (error) throw error;
+
+  return res.json({
+    success: true,
+    record: mapRecordRow(data[0]),
+  });
+} else {
+  // INSERT new record
+  const insertPayload = {
+    work_name: workName || null,
+    pr_no: prNo || null,
+    sub_division: subDivision || null,
+    record_type: recordType || "Other Record",
+    amount: amount || 0,
+    send_to: sendTo || null,
+    pdf_url: finalPdfUrl,
+    is_deleted: false,
+
+    // NEW FIELDS
+    pr_date: prDate || null,
+    budget_head: budgetHead || null,
+    po_no: poNo || null,
+    pr_date2: prDate2 || null,
+    firm_name: firmName || null,
+    division_label: divisionLabel || null,
+    page_no: pageNo || null,
+    remarks: remarks || null,
+    high_value_spares: highValueSpares || null,
+  };
+
+  const { data, error } = await supabase
+    .from("records")
+    .insert(insertPayload)
+    .select("*");
+
+  if (error) throw error;
+
+  return res.json({
+    success: true,
+    record: mapRecordRow(data[0]),
+  });
+}
 
 // Move to trash
 app.delete("/records/:id", authenticateToken, async (req, res) => {
@@ -826,6 +832,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
