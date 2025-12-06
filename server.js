@@ -433,6 +433,155 @@ app.post(
   }
 );
 
+/* ============================================================
+      ESTIMATES API — ADD / LIST / EDIT / TRASH
+============================================================ */
+
+/* -------------------------------------------
+   CREATE NEW ESTIMATE
+-------------------------------------------- */
+app.post("/estimates", async (req, res) => {
+  try {
+    const data = req.body;
+
+    const { error } = await supabase.from("estimates").insert(data);
+
+    if (error) throw error;
+
+    res.json({ success: true, message: "Estimate saved successfully" });
+  } catch (err) {
+    console.error("Error saving estimate:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* -------------------------------------------
+   GET ALL ESTIMATES (ACTIVE ONLY)
+-------------------------------------------- */
+app.get("/estimates", async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from("estimates")
+      .select("*")
+      .eq("is_deleted", false)
+      .order("id", { ascending: false });
+
+    if (error) throw error;
+
+    res.json(data);
+  } catch (err) {
+    console.error("Error fetching estimates:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* -------------------------------------------
+   GET TRASH ESTIMATES
+-------------------------------------------- */
+app.get("/estimates/trash", async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from("estimates")
+      .select("*")
+      .eq("is_deleted", true)
+      .order("id", { ascending: false });
+
+    if (error) throw error;
+
+    res.json(data);
+  } catch (err) {
+    console.error("Error fetching trash:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* -------------------------------------------
+   UPDATE / EDIT ESTIMATE
+-------------------------------------------- */
+app.put("/estimates/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+    const data = req.body;
+
+    const { error } = await supabase
+      .from("estimates")
+      .update(data)
+      .eq("id", id);
+
+    if (error) throw error;
+
+    res.json({ success: true, message: "Estimate updated successfully" });
+  } catch (err) {
+    console.error("Error updating estimate:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* -------------------------------------------
+   SOFT DELETE (MOVE TO TRASH)
+-------------------------------------------- */
+app.delete("/estimates/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const { error } = await supabase
+      .from("estimates")
+      .update({ is_deleted: true })
+      .eq("id", id);
+
+    if (error) throw error;
+
+    res.json({ success: true, message: "Moved to trash" });
+  } catch (err) {
+    console.error("Error deleting estimate:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* -------------------------------------------
+   RESTORE FROM TRASH (OPTIONAL)
+-------------------------------------------- */
+app.post("/estimates/restore/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const { error } = await supabase
+      .from("estimates")
+      .update({ is_deleted: false })
+      .eq("id", id);
+
+    if (error) throw error;
+
+    res.json({ success: true, message: "Record restored" });
+  } catch (err) {
+    console.error("Restore error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* -------------------------------------------
+   HARD DELETE (PERMANENT) — OPTIONAL
+-------------------------------------------- */
+app.delete("/estimates/remove/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const { error } = await supabase
+      .from("estimates")
+      .delete()
+      .eq("id", id);
+
+    if (error) throw error;
+
+    res.json({ success: true, message: "Permanently deleted" });
+  } catch (err) {
+    console.error("Hard delete error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+
 // =================================================================
 // DAILY PROGRESS ROUTES (Supabase instead of daily.json)
 // =================================================================
@@ -825,6 +974,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
