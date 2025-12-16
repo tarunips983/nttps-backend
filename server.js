@@ -965,6 +965,33 @@ app.delete("/cl/:id", authenticateToken, async (req, res) => {
   }
 });
 
+function requireRole(roles = []) {
+  return (req, res, next) => {
+    if (!req.user || !roles.includes(req.user.role)) {
+      return res.status(403).json({ error: "Access denied" });
+    }
+    next();
+  };
+}
+localStorage.setItem("role", user.role);
+
+app.get("/api/remarks/:pr", async (req, res) => {
+  const { pr } = req.params;
+  const data = await db.query(
+    "select * from remarks where pr_no=$1 order by created_at",
+    [pr]
+  );
+  res.json(data.rows);
+});
+
+app.post("/api/remarks", async (req, res) => {
+  const { pr_no, text } = req.body;
+  await db.query(
+    "insert into remarks(pr_no, text, by) values ($1,$2,$3)",
+    [pr_no, text, req.user.email]
+  );
+  res.sendStatus(200);
+});
 
 // =================================================================
 // START SERVER
@@ -974,6 +1001,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
