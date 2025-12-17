@@ -93,6 +93,7 @@ function mapRecordRow(row) {
     amount: row.amount,
     sendTo: row.send_to,
     pdfPath: row.pdf_url,
+    status: row.status,
     isDeleted: row.is_deleted,
     createdAt: row.created_at,
     // NEW FIELDS
@@ -189,7 +190,7 @@ app.post(
         amount,
         sendTo,
         pdfPath,
-
+        status,
         // new fields
         prDate,
         budgetHead,
@@ -243,7 +244,7 @@ app.post(
           record_type: recordType || null,
           amount: amount || null,
           send_to: sendTo || null,
-
+          status: status || null,
           pr_date: prDate || null,
           budget_head: budgetHead || null,
           po_no: poNo || null,
@@ -278,9 +279,9 @@ app.post(
         record_type: recordType || "Other Record",
         amount: amount || 0,
         send_to: sendTo || null,
+        status: status || 'Pending',
         pdf_url: finalPdfUrl,
         is_deleted: false,
-
         pr_date: prDate || null,
         budget_head: budgetHead || null,
         po_no: poNo || null,
@@ -1001,6 +1002,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
