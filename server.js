@@ -974,7 +974,6 @@ function requireRole(roles = []) {
     next();
   };
 }
-localStorage.setItem("role", user.role);
 
 app.get("/api/remarks/:pr", async (req, res) => {
   const { pr } = req.params;
@@ -1002,6 +1001,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
