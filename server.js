@@ -1,17 +1,15 @@
-require("dotenv").config(); // Load .env first
+import "dotenv/config";
 
-const express = require("express");
-const cors = require("cors");
-const multer = require("multer");
-const path = require("path");
-const bcrypt = require("bcrypt");
-const jwt = require("jsonwebtoken");
-const nodemailer = require("nodemailer");
+import express from "express";
+import cors from "cors";
+import multer from "multer";
+import path from "path";
+import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
+import nodemailer from "nodemailer";
+import { createClient } from "@supabase/supabase-js";
+import pdfjsLib from "pdfjs-dist";
 
-// =========================
-// SUPABASE
-// =========================
-const { createClient } = require("@supabase/supabase-js");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE;
@@ -43,6 +41,12 @@ app.use(
 // ---------------------------------------------
 const EMAIL_USER = process.env.EMAIL_USER;
 const EMAIL_PASS = process.env.EMAIL_PASS;
+
+import { fileURLToPath } from "url";
+import { dirname } from "path";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const transporter = nodemailer.createTransport({
   host: "smtp.gmail.com",
@@ -392,7 +396,6 @@ app.delete("/records/trash/:id", authenticateToken, async (req, res) => {
 // =================================================================
 // PDF TEXT EXTRACTION (unchanged, still uses pdfjs-dist)
 // =================================================================
-const pdfjsLib = require("pdfjs-dist");
 
 app.post(
   "/extract-pdf",
@@ -1071,6 +1074,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
