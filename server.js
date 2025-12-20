@@ -941,6 +941,76 @@ app.post(
 );
 
 
+app.post(
+  "/file-transfer/upload",
+  uploadInMemory.single("file"),
+  async (req, res) => {
+    try {
+      const file = req.file;
+      if (!file) return res.status(400).json({ error: "No file" });
+
+      const ext = path.extname(file.originalname);
+      const fileName = `${Date.now()}_${Math.random().toString(36).slice(2)}${ext}`;
+
+      // Upload to Supabase Storage
+      const { error } = await supabase.storage
+        .from("file_transfer")
+        .upload(fileName, file.buffer, {
+          contentType: file.mimetype,
+        });
+
+      if (error) throw error;
+
+      const fileUrl = supabase.storage
+        .from("file_transfer")
+        .getPublicUrl(fileName).data.publicUrl;
+
+      const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
+
+      await supabase.from("file_transfers").insert({
+        file_name: file.originalname,
+        file_url: fileUrl,
+        file_size: file.size,
+        expires_at: expiresAt
+      });
+
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: "Upload failed" });
+    }
+  }
+);
+app.get("/file-transfer", async (req, res) => {
+  const { data } = await supabase
+    .from("file_transfers")
+    .select("*")
+    .order("uploaded_at", { ascending: false });
+
+  res.json(data);
+});
+import cron from "node-cron";
+
+cron.schedule("0 * * * *", async () => {
+  const now = new Date().toISOString();
+
+  const { data } = await supabase
+    .from("file_transfers")
+    .select("*")
+    .lt("expires_at", now);
+
+  for (const file of data) {
+    const url = new URL(file.file_url);
+    const path = url.pathname.split("/file_transfer/")[1];
+
+    await supabase.storage.from("file_transfer").remove([path]);
+    await supabase.from("file_transfers").delete().eq("id", file.id);
+  }
+
+  console.log("Expired files cleaned");
+});
+
+
+
 // GET all CL data
 app.get("/cl", async (req, res) => {
   try {
@@ -1001,6 +1071,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
