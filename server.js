@@ -8,7 +8,9 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import nodemailer from "nodemailer";
 import { createClient } from "@supabase/supabase-js";
-import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.js";
+import * as pdfjsLib from "pdfjs-dist/build/pdf.js";
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = null;
 
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -43,10 +45,10 @@ const EMAIL_USER = process.env.EMAIL_USER;
 const EMAIL_PASS = process.env.EMAIL_PASS;
 
 import { fileURLToPath } from "url";
-import { dirname } from "path";
+
 
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const __dirname = path.dirname(__filename);
 
 const transporter = nodemailer.createTransport({
   host: "smtp.gmail.com",
@@ -1039,32 +1041,52 @@ app.delete("/cl/:id", authenticateToken, async (req, res) => {
   }
 });
 
-function requireRole(roles = []) {
-  return (req, res, next) => {
-    if (!req.user || !roles.includes(req.user.role)) {
-      return res.status(403).json({ error: "Access denied" });
-    }
-    next();
-  };
-}
 
 app.get("/api/remarks/:pr", async (req, res) => {
-  const { pr } = req.params;
-  const data = await db.query(
-    "select * from remarks where pr_no=$1 order by created_at",
-    [pr]
-  );
-  res.json(data.rows);
+  try {
+    const { pr } = req.params;
+
+    const { data, error } = await supabase
+      .from("remarks")
+      .select("*")
+      .eq("pr_no", pr)
+      .order("created_at", { ascending: true });
+
+    if (error) throw error;
+
+    res.json(data);
+  } catch (err) {
+    console.error("GET remarks error:", err);
+    res.status(500).json({ error: "Failed to load remarks" });
+  }
 });
 
-app.post("/api/remarks", async (req, res) => {
-  const { pr_no, text } = req.body;
-  await db.query(
-    "insert into remarks(pr_no, text, by) values ($1,$2,$3)",
-    [pr_no, text, req.user.email]
-  );
-  res.sendStatus(200);
+
+app.post("/api/remarks", authenticateToken, async (req, res) => {
+  try {
+    const { pr_no, text } = req.body;
+
+    if (!pr_no || !text) {
+      return res.status(400).json({ error: "Missing pr_no or text" });
+    }
+
+    const { error } = await supabase
+      .from("remarks")
+      .insert({
+        pr_no,
+        text,
+        by: req.user.email
+      });
+
+    if (error) throw error;
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("POST remarks error:", err);
+    res.status(500).json({ error: "Failed to save remark" });
+  }
 });
+
 
 // =================================================================
 // START SERVER
@@ -1074,6 +1096,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
