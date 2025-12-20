@@ -1,6 +1,7 @@
 {
   "name": "nttps-backend",
   "version": "1.0.0",
+  "type": "module",
   "description": "Backend server for NT TPS project",
   "main": "server.js",
   "scripts": {
