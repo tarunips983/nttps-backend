@@ -971,14 +971,15 @@ app.post(
 
       const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48 hrs
 
-      await supabase.from("file_transfers").insert({
-        file_name: file.originalname,
-        file_path: storagePath,
-        file_url: fileUrl,
-        file_size: file.size,
-        uploaded_by: req.user.email,
-        expires_at: expiresAt
-      });
+        const { error: insertError } = await supabase.from("file_transfers")
+  .insert({
+    file_name: file.originalname,
+    file_path: storagePath,
+    file_url: fileUrl,
+    file_size: file.size,
+    uploaded_by: req.user.email,
+    expires_at: expiresAt
+  });
 
       res.json({ success: true });
 
@@ -1139,6 +1140,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
