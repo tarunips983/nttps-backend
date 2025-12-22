@@ -943,52 +943,58 @@ app.post(
   }
 );
 
-
 app.post(
   "/file-transfer/upload",
   authenticateToken,
-  uploadInMemory.single("file"),
+  uploadInMemory.array("files", 10),
   async (req, res) => {
     try {
-      const file = req.file;
-      if (!file) return res.status(400).json({ error: "No file uploaded" });
+      if (!req.files || req.files.length === 0) {
+        return res.status(400).json({ error: "No files uploaded" });
+      }
 
-      const ext = path.extname(file.originalname);
-      const fileName = `${Date.now()}_${Math.random().toString(36).slice(2)}${ext}`;
-      const storagePath = `uploads/${fileName}`;
+      const results = [];
 
-      const { error } = await supabase.storage
-        .from("file-transfer")
-        .upload(storagePath, file.buffer, {
-          contentType: file.mimetype
+      for (const file of req.files) {
+        const ext = path.extname(file.originalname);
+        const fileName = `${Date.now()}_${Math.random().toString(36).slice(2)}${ext}`;
+        const storagePath = `uploads/${fileName}`;
+
+        const { error } = await supabase.storage
+          .from("file-transfer")
+          .upload(storagePath, file.buffer, {
+            contentType: file.mimetype
+          });
+
+        if (error) throw error;
+
+        const fileUrl = supabase.storage
+          .from("file-transfer")
+          .getPublicUrl(storagePath).data.publicUrl;
+
+        const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
+
+        await supabase.from("file_transfers").insert({
+          file_name: file.originalname,
+          file_path: storagePath,
+          file_url: fileUrl,
+          file_size: file.size,
+          uploaded_by: req.user.email,
+          expires_at: expiresAt
         });
 
-      if (error) throw error;
+        results.push(file.originalname);
+      }
 
-      const fileUrl = supabase.storage
-        .from("file-transfer")
-        .getPublicUrl(storagePath).data.publicUrl;
-
-      const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48 hrs
-
-        const { error: insertError } = await supabase.from("file_transfers")
-  .insert({
-    file_name: file.originalname,
-    file_path: storagePath,
-    file_url: fileUrl,
-    file_size: file.size,
-    uploaded_by: req.user.email,
-    expires_at: expiresAt
-  });
-
-      res.json({ success: true });
+      res.json({ success: true, uploaded: results });
 
     } catch (err) {
-      console.error("File upload error:", err);
+      console.error("Multi upload error:", err);
       res.status(500).json({ error: "Upload failed" });
     }
   }
 );
+
 app.get("/file-transfer", async (req, res) => {
   try {
     const now = new Date().toISOString();
@@ -1140,6 +1146,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
