@@ -948,53 +948,97 @@ app.post(
 
 app.post(
   "/file-transfer/upload",
+  authenticateToken,
   uploadInMemory.single("file"),
   async (req, res) => {
     try {
       const file = req.file;
-      if (!file) return res.status(400).json({ error: "No file" });
+      if (!file) return res.status(400).json({ error: "No file uploaded" });
 
       const ext = path.extname(file.originalname);
       const fileName = `${Date.now()}_${Math.random().toString(36).slice(2)}${ext}`;
+      const storagePath = `uploads/${fileName}`;
 
-      // Upload to Supabase Storage
       const { error } = await supabase.storage
-        .from("file_transfer")
-        .upload(fileName, file.buffer, {
-          contentType: file.mimetype,
+        .from("file-transfer")
+        .upload(storagePath, file.buffer, {
+          contentType: file.mimetype
         });
 
       if (error) throw error;
 
       const fileUrl = supabase.storage
-        .from("file_transfer")
-        .getPublicUrl(fileName).data.publicUrl;
+        .from("file-transfer")
+        .getPublicUrl(storagePath).data.publicUrl;
 
-      const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
+      const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48 hrs
 
       await supabase.from("file_transfers").insert({
         file_name: file.originalname,
+        file_path: storagePath,
         file_url: fileUrl,
         file_size: file.size,
+        uploaded_by: req.user.email,
         expires_at: expiresAt
       });
 
       res.json({ success: true });
+
     } catch (err) {
+      console.error("File upload error:", err);
       res.status(500).json({ error: "Upload failed" });
     }
   }
 );
 app.get("/file-transfer", async (req, res) => {
-  const { data } = await supabase
-    .from("file_transfers")
-    .select("*")
-    .order("uploaded_at", { ascending: false });
+  try {
+    const now = new Date().toISOString();
 
-  res.json(data);
+    const { data, error } = await supabase
+      .from("file_transfers")
+      .select("*")
+      .gt("expires_at", now)
+      .order("uploaded_at", { ascending: false });
+
+    if (error) throw error;
+
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to load files" });
+  }
 });
-import cron from "node-cron";
+app.delete(
+  "/file-transfer/:id",
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const { id } = req.params;
 
+      const { data, error } = await supabase
+        .from("file_transfers")
+        .select("*")
+        .eq("id", id)
+        .single();
+
+      if (!data || error) {
+        return res.status(404).json({ error: "File not found" });
+      }
+
+      await supabase.storage
+        .from("file-transfer")
+        .remove([data.file_path]);
+
+      await supabase
+        .from("file_transfers")
+        .delete()
+        .eq("id", id);
+
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: "Delete failed" });
+    }
+  }
+);
 cron.schedule("0 * * * *", async () => {
   const now = new Date().toISOString();
 
@@ -1003,18 +1047,19 @@ cron.schedule("0 * * * *", async () => {
     .select("*")
     .lt("expires_at", now);
 
-  for (const file of data) {
-    const url = new URL(file.file_url);
-    const path = url.pathname.split("/file_transfer/")[1];
+  for (const file of data || []) {
+    await supabase.storage
+      .from("file-transfer")
+      .remove([file.file_path]);
 
-    await supabase.storage.from("file_transfer").remove([path]);
-    await supabase.from("file_transfers").delete().eq("id", file.id);
+    await supabase
+      .from("file_transfers")
+      .delete()
+      .eq("id", file.id);
   }
 
-  console.log("Expired files cleaned");
+  console.log("Expired file transfers cleaned");
 });
-
-
 
 // GET all CL data
 app.get("/cl", async (req, res) => {
@@ -1096,6 +1141,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
