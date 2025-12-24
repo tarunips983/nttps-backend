@@ -626,6 +626,37 @@ app.get("/daily-progress/:id", async (req, res) => {
     res.status(500).json({ error: "Failed to load snapshot" });
   }
 });
+app.post("/page-visit/:page", async (req, res) => {
+  const { page } = req.params;
+
+  const { data, error } = await supabase
+    .from("page_visits")
+    .update({
+      visit_count: supabase.rpc("increment", { x: 1 }),
+      last_visited: new Date().toISOString()
+    })
+    .eq("page_name", page);
+
+  if (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Failed to update visit count" });
+  }
+
+  res.json({ success: true });
+});
+app.get("/page-visit/:page", async (req, res) => {
+  const { page } = req.params;
+
+  const { data, error } = await supabase
+    .from("page_visits")
+    .select("visit_count")
+    .eq("page_name", page)
+    .single();
+
+  if (error) return res.status(500).json({ error: "Fetch failed" });
+
+  res.json({ count: data.visit_count });
+});
 
 // Create / update snapshot
 app.post("/daily-progress", authenticateToken, async (req, res) => {
@@ -1146,6 +1177,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
