@@ -627,23 +627,29 @@ app.get("/daily-progress/:id", async (req, res) => {
   }
 });
 app.post("/page-visit/:page", async (req, res) => {
-  const { page } = req.params;
+  try {
+    const { page } = req.params;
 
-  const { data, error } = await supabase
-    .from("page_visits")
-    .update({
-      visit_count: supabase.rpc("increment", { x: 1 }),
-      last_visited: new Date().toISOString()
-    })
-    .eq("page_name", page);
+    const { error } = await supabase
+      .from("page_visits")
+      .update({
+        visit_count: supabase.literal("visit_count + 1"),
+        last_visited: new Date().toISOString()
+      })
+      .eq("page_name", page);
 
-  if (error) {
-    console.error(error);
-    return res.status(500).json({ error: "Failed to update visit count" });
+    if (error) {
+      console.error("Visit increment error:", error);
+      return res.status(500).json({ error: "Increment failed" });
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Server error:", err);
+    res.status(500).json({ error: "Server crash" });
   }
-
-  res.json({ success: true });
 });
+
 app.get("/page-visit/:page", async (req, res) => {
   const { page } = req.params;
 
@@ -1177,6 +1183,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
