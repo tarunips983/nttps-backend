@@ -626,27 +626,43 @@ app.get("/daily-progress/:id", async (req, res) => {
     res.status(500).json({ error: "Failed to load snapshot" });
   }
 });
+
 app.post("/page-visit/:page", async (req, res) => {
   try {
     const { page } = req.params;
 
-    const { error } = await supabase
+    // Read current count
+    const { data, error: readErr } = await supabase
+      .from("page_visits")
+      .select("visit_count")
+      .eq("page_name", page)
+      .single();
+
+    if (readErr) {
+      console.error("Read error:", readErr);
+      return res.status(500).json({ error: "Read failed" });
+    }
+
+    const newCount = (data.visit_count || 0) + 1;
+
+    // Update count
+    const { error: updateErr } = await supabase
       .from("page_visits")
       .update({
-        visit_count: supabase.literal("visit_count + 1"),
+        visit_count: newCount,
         last_visited: new Date().toISOString()
       })
       .eq("page_name", page);
 
-    if (error) {
-      console.error("Visit increment error:", error);
-      return res.status(500).json({ error: "Increment failed" });
+    if (updateErr) {
+      console.error("Update error:", updateErr);
+      return res.status(500).json({ error: "Update failed" });
     }
 
-    res.json({ success: true });
-  } catch (err) {
-    console.error("Server error:", err);
-    res.status(500).json({ error: "Server crash" });
+    res.json({ success: true, count: newCount });
+  } catch (e) {
+    console.error("Visit crash:", e);
+    res.status(500).json({ error: "Server error" });
   }
 });
 
@@ -663,6 +679,7 @@ app.get("/page-visit/:page", async (req, res) => {
 
   res.json({ count: data.visit_count });
 });
+
 
 // Create / update snapshot
 app.post("/daily-progress", authenticateToken, async (req, res) => {
@@ -1183,6 +1200,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
