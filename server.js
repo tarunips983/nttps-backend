@@ -629,45 +629,45 @@ app.get("/daily-progress/:id", async (req, res) => {
 
 app.post("/page-visit/:page", async (req, res) => {
   try {
-    const { page } = req.params;
+    const page = req.params.page.trim();
 
-    // Read current count
-    const { data, error: readErr } = await supabase
+    const { data, error } = await supabase
       .from("page_visits")
-      .select("visit_count")
-      .eq("page_name", page)
-      .single();
+      .upsert(
+        {
+          page_name: page,
+          visit_count: 1,
+          last_visited: new Date().toISOString()
+        },
+        { onConflict: "page_name" }
+      )
+      .select();
 
-    if (readErr) {
-      console.error("Read error:", readErr);
-      return res.status(500).json({ error: "Read failed" });
+    if (error) {
+      console.error("Upsert error:", error);
+      return res.status(500).json({ error: "Upsert failed" });
     }
 
-    const newCount = (data.visit_count || 0) + 1;
-
-    // Update count
-    const { error: updateErr } = await supabase
-      .from("page_visits")
-      .update({
-        visit_count: newCount,
-        last_visited: new Date().toISOString()
-      })
-      .eq("page_name", page);
-
-    if (updateErr) {
-      console.error("Update error:", updateErr);
-      return res.status(500).json({ error: "Update failed" });
+    // If row already existed, increment manually
+    if (data && data.length > 0) {
+      await supabase
+        .from("page_visits")
+        .update({
+          visit_count: data[0].visit_count + 1,
+          last_visited: new Date().toISOString()
+        })
+        .eq("page_name", page);
     }
 
-    res.json({ success: true, count: newCount });
-  } catch (e) {
-    console.error("Visit crash:", e);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Visit error:", err);
     res.status(500).json({ error: "Server error" });
   }
 });
 
 app.get("/page-visit/:page", async (req, res) => {
-  const { page } = req.params;
+  const page = req.params.page.trim();
 
   const { data, error } = await supabase
     .from("page_visits")
@@ -675,11 +675,12 @@ app.get("/page-visit/:page", async (req, res) => {
     .eq("page_name", page)
     .single();
 
-  if (error) return res.status(500).json({ error: "Fetch failed" });
+  if (error) {
+    return res.json({ count: 0 });
+  }
 
   res.json({ count: data.visit_count });
 });
-
 
 // Create / update snapshot
 app.post("/daily-progress", authenticateToken, async (req, res) => {
@@ -1200,6 +1201,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
