@@ -33,8 +33,10 @@ app.use(
     origin: "*",
     methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true
   })
 );
+
 
 // ---------------------------------------------
 // EMAIL SETUP
@@ -207,6 +209,12 @@ app.post(
         highValueSpares
       } = req.body;
 
+const cleanAmount =
+  typeof amount === "string"
+    ? Number(amount.replace(/,/g, "")) || 0
+    : amount || 0;
+
+      
       let newPdfUrl = null;
 
       // upload PDF
@@ -246,7 +254,7 @@ app.post(
           pr_no: prNo || null,
           sub_division: subDivision || null,
           record_type: recordType || null,
-          amount: amount || null,
+          amount: cleanAmount,
           send_to: sendTo || null,
           status: status || null,
           pr_date: prDate || null,
@@ -281,7 +289,7 @@ app.post(
         pr_no: prNo || null,
         sub_division: subDivision || null,
         record_type: recordType || "Other Record",
-        amount: amount || 0,
+        amount: cleanAmount,
         send_to: sendTo || null,
         status: status || 'Pending',
         pdf_url: finalPdfUrl,
@@ -292,7 +300,7 @@ app.post(
         pr_date2: prDate2 || null,
         firm_name: firmName || null,
         division_label: divisionLabel || null,
-        page_no: pageNo || null,
+        pg_no: pageNo || null,
         remarks: remarks || null,
         high_value_spares: highValueSpares || null,
       };
@@ -1201,6 +1209,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
