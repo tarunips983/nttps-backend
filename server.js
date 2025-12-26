@@ -300,7 +300,7 @@ const cleanAmount =
         pr_date2: prDate2 || null,
         firm_name: firmName || null,
         division_label: divisionLabel || null,
-        pg_no: pageNo || null,
+        page_no: pageNo || null,
         remarks: remarks || null,
         high_value_spares: highValueSpares || null,
       };
@@ -1209,6 +1209,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
