@@ -1200,6 +1200,18 @@ app.post("/api/remarks", authenticateToken, async (req, res) => {
   }
 });
 
+app.post("/ai/learn", authenticateToken, async (req, res) => {
+  const { rawText, module, extracted, corrected } = req.body;
+
+  await supabase.from("ai_learning").insert({
+    raw_text: rawText,
+    module,
+    extracted,
+    corrected
+  });
+
+  res.json({ success: true });
+});
 
 // =================================================================
 // START SERVER
@@ -1209,6 +1221,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
