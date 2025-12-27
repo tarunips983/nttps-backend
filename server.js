@@ -1164,7 +1164,7 @@ app.delete("/cl/:id", authenticateToken, async (req, res) => {
 app.get("/ai/memory", authenticateToken, async (req, res) => {
   try {
     const { data, error } = await supabase
-      .from("ai_memory")
+      .from("ai_learning")   // ✅ CORRECT TABLE
       .select("*")
       .order("id", { ascending: true });
 
@@ -1175,6 +1175,7 @@ app.get("/ai/memory", authenticateToken, async (req, res) => {
     res.status(500).json([]);
   }
 });
+
 
 app.get("/api/remarks/:pr", async (req, res) => {
   try {
@@ -1304,6 +1305,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
