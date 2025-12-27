@@ -1213,6 +1213,64 @@ app.post("/ai/learn", authenticateToken, async (req, res) => {
   res.json({ success: true });
 });
 
+app.get("/ai/search/estimates", async (req, res) => {
+  const q = req.query.q;
+  if (!q) return res.json([]);
+
+  const { data, error } = await supabase
+    .from("estimates")
+    .select("*")              // ✅ ALL HEADINGS
+    .ilike("description", `%${q}%`)
+    .limit(1);
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+app.get("/ai/search/records", async (req, res) => {
+  const q = req.query.q;
+  if (!q) return res.json([]);
+
+  const { data, error } = await supabase
+    .from("records")
+    .select("*")              // ✅ ALL HEADINGS
+    .ilike("work_name", `%${q}%`)
+    .limit(1);
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+app.get("/ai/search/daily", async (req, res) => {
+  const q = req.query.q;
+  if (!q) return res.json([]);
+
+  const { data, error } = await supabase
+    .from("daily_progress")
+    .select("*")              // ✅ ALL HEADINGS
+    .ilike("activity", `%${q}%`)
+    .limit(1);
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+app.get("/ai/search/cl", async (req, res) => {
+  const q = req.query.q;
+  if (!q) return res.json([]);
+
+  const { data, error } = await supabase
+    .from("cl_biodata")
+    .select("*")              // ✅ ALL HEADINGS
+    .or(`name.ilike.%${q}%,aadhar.ilike.%${q}%`)
+    .limit(1);
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+
+
 // =================================================================
 // START SERVER
 // =================================================================
@@ -1221,6 +1279,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
