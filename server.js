@@ -28,14 +28,32 @@ const app = express();
 // ---------------------------------------------
 // CORS
 // ---------------------------------------------
+const allowedOrigins = [
+  "https://drnttps.vercel.app",
+  "http://localhost:3000",
+  "http://localhost:5173"
+];
+
 app.use(
   cors({
-    origin: "*",
-    methods: ["GET", "POST", "PUT", "DELETE"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true
+    origin: function (origin, callback) {
+      // Allow server-to-server & Postman
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error("CORS not allowed"));
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"]
   })
 );
+app.options("*", cors());
+
+
 
 
 // ---------------------------------------------
@@ -1298,6 +1316,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
