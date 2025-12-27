@@ -28,36 +28,14 @@ const app = express();
 // ---------------------------------------------
 // CORS
 // ---------------------------------------------
-const allowedOrigins = [
-  "https://drnttps.vercel.app",
-  "http://localhost:3000",
-  "http://localhost:5173"
-];
-
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-
-  if (allowedOrigins.includes(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-  }
-
-  res.setHeader("Access-Control-Allow-Credentials", "true");
-  res.setHeader(
-    "Access-Control-Allow-Headers",
-    "Origin, X-Requested-With, Content-Type, Accept, Authorization"
-  );
-  res.setHeader(
-    "Access-Control-Allow-Methods",
-    "GET, POST, PUT, DELETE, OPTIONS"
-  );
-
-  // 🔑 VERY IMPORTANT: handle preflight immediately
-  if (req.method === "OPTIONS") {
-    return res.sendStatus(200);
-  }
-
-  next();
-});
+app.use(
+  cors({
+    origin: "*",
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
+;
 
 
 
@@ -1179,6 +1157,21 @@ app.delete("/cl/:id", authenticateToken, async (req, res) => {
   }
 });
 
+// ================= AI MEMORY =================
+app.get("/ai/memory", authenticateToken, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from("ai_memory")
+      .select("*")
+      .order("id", { ascending: true });
+
+    if (error) throw error;
+    res.json(data);
+  } catch (err) {
+    console.error("AI memory error:", err);
+    res.status(500).json([]);
+  }
+});
 
 app.get("/api/remarks/:pr", async (req, res) => {
   try {
@@ -1296,23 +1289,8 @@ app.get("/ai/search/cl", async (req, res) => {
 
 
 // ================= AI MEMORY =================
-// ================= AI MEMORY =================
-app.get("/ai/memory", authenticateToken, async (req, res) => {
-  try {
-    const { data, error } = await supabase
-      .from("ai_learning")
-      .select("raw_text, module, corrected")
-      .order("created_at", { ascending: false })
-      .limit(300);
 
-    if (error) throw error;
 
-    res.json(data || []);
-  } catch (err) {
-    console.error("AI memory error:", err.message);
-    res.status(500).json([]);
-  }
-});
 
 
 // =================================================================
@@ -1323,6 +1301,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
