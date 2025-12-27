@@ -1270,6 +1270,25 @@ app.get("/ai/search/cl", async (req, res) => {
 });
 
 
+// ================= AI MEMORY =================
+// ================= AI MEMORY =================
+app.get("/ai/memory", authenticateToken, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from("ai_learning")
+      .select("raw_text, module, corrected")
+      .order("created_at", { ascending: false })
+      .limit(300);
+
+    if (error) throw error;
+
+    res.json(data || []);
+  } catch (err) {
+    console.error("AI memory error:", err.message);
+    res.status(500).json([]);
+  }
+});
+
 
 // =================================================================
 // START SERVER
@@ -1279,6 +1298,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
