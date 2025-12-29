@@ -94,54 +94,6 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 // ---------------------------------------------
 // HELPERS: map DB rows -> frontend shape
 // ---------------------------------------------
-function mapRecordRow(row) {
-  if (!row) return null;
-
-  return {
-    // 🔑 Identifiers
-    id: row.id,
-    prNo: row.pr_no,
-
-    // 📄 Core PR data
-    workName: row.work_name,
-    recordType: row.record_type,
-    amount: row.amount,
-
-    // ✅ Status
-    status: row.status,           // Pending / Completed
-    prStatus: row.pr_status,      // PR Created / Sent etc.
-
-    // 🏢 Classification
-    divisionLabel: row.division_label,
-    subDivision: row.sub_division,
-    sendTo: row.send_to,
-
-    // 🏭 Vendor / PO
-    firmName: row.firm_name,
-    poNo: row.po_no,
-    budgetHead: row.budget_head,
-
-    // 📅 Dates
-    prDate: row.pr_date,
-    prDate2: row.pr_date2,
-
-    // 📄 Document
-    pdfPath: row.pdf_url,
-    pageNo: row.page_no,
-    remarks: row.remarks,
-    highValueSpares: row.high_value_spares,
-
-    // 👤 Responsibility
-    pendingWith: row.pending_with,
-    responsibleOfficer: row.responsible_officer,
-    lastUpdatedBy: row.last_updated_by,
-    lastUpdatedAt: row.last_updated_at,
-
-    // 🕒 System
-    createdAt: row.created_at,
-    isDeleted: row.is_deleted
-  };
-}
 
 
 function mapDailyRow(row) {
@@ -1260,18 +1212,27 @@ app.post("/ai/learn", authenticateToken, async (req, res) => {
 
 function mapEstimateRow(row) {
   if (!row) return null;
+
   return {
     id: row.id,
-    estimateNo: row.estimate_no,
+    prNo: row.prNo,
+    estimateNo: row.estimateNo,
     description: row.description,
-    divisionLabel: row.division_label,
-    amount: row.amount,
-    poNo: row.po_no,
-    pageNo: row.page_no,
+    division: row.division,
+    poNo: row.poNo,
+    grossAmount: row.grossAmount,
+    netAmount: row.netAmount,
+    loaNo: row.loaNo,
+    billingDoc: row.billingDoc,
+    mbookNo: row.mbookNo,
+    regPg: row.regPg,
+    backCharging: row.backCharging,
+    dates: row.dates,
     status: row.status,
     createdAt: row.created_at
   };
 }
+
 app.get("/ai/search/estimates", async (req, res) => {
   const q = req.query.q;
   if (!q) return res.json([]);
@@ -1286,6 +1247,57 @@ app.get("/ai/search/estimates", async (req, res) => {
 
   res.json(data.map(mapEstimateRow));
 });
+
+
+function mapRecordRow(row) {
+  if (!row) return null;
+
+  return {
+    // 🔑 Identifiers
+    id: row.id,
+    prNo: row.pr_no,
+
+    // 📄 Core PR data
+    workName: row.work_name,
+    recordType: row.record_type,
+    amount: row.amount,
+
+    // ✅ Status
+    status: row.status,           // Pending / Completed
+    prStatus: row.pr_status,      // PR Created / Sent etc.
+
+    // 🏢 Classification
+    divisionLabel: row.division_label,
+    subDivision: row.sub_division,
+    sendTo: row.send_to,
+
+    // 🏭 Vendor / PO
+    firmName: row.firm_name,
+    poNo: row.po_no,
+    budgetHead: row.budget_head,
+
+    // 📅 Dates
+    prDate: row.pr_date,
+    prDate2: row.pr_date2,
+
+    // 📄 Document
+    pdfPath: row.pdf_url,
+    pageNo: row.page_no,
+    remarks: row.remarks,
+    highValueSpares: row.high_value_spares,
+
+    // 👤 Responsibility
+    pendingWith: row.pending_with,
+    responsibleOfficer: row.responsible_officer,
+    lastUpdatedBy: row.last_updated_by,
+    lastUpdatedAt: row.last_updated_at,
+
+    // 🕒 System
+    createdAt: row.created_at,
+    isDeleted: row.is_deleted
+  };
+}
+
 
 
 app.get("/ai/search/records", async (req, res) => {
@@ -1308,18 +1320,16 @@ app.get("/ai/search/records", async (req, res) => {
 });
 
 
-
 function mapDailyAIRow(row) {
-  if (!row) return null;
   return {
     id: row.id,
     date: row.date,
-    activity: row.activity || "",
-    status: row.status || "",
-    manpower: row.manpower || "",
-    divisionLabel: row.division_label || ""
+    tableHTML: row.table_html,
+    rowCount: row.row_count,
+    createdAt: row.created_at
   };
 }
+
 app.get("/ai/search/daily", async (req, res) => {
   const q = req.query.q;
   if (!q) return res.json([]);
@@ -1336,19 +1346,24 @@ app.get("/ai/search/daily", async (req, res) => {
 });
 
 function mapCLRow(row) {
-  if (!row) return null;
   return {
     id: row.id,
     name: row.name,
     gender: row.gender,
     aadhar: row.aadhar,
+    phone: row.phone,
+    station: row.station,
+    division: row.division,
     doj: row.doj,
+    dob: row.dob,
     wages: row.wages,
     nominee: row.nominee,
     relation: row.relation,
-    divisionLabel: row.division
+    photoUrl: row.photo_url,
+    createdAt: row.created_at
   };
 }
+
 app.get("/ai/search/cl", async (req, res) => {
   const q = req.query.q;
   if (!q) return res.json([]);
@@ -1379,67 +1394,70 @@ function mapFileRow(row) {
 
 app.post("/ai/query", authenticateToken, async (req, res) => {
   try {
-    const { intent, text } = req.body;
-    const q = text.toLowerCase();
+    const { module, identifier, intent } = req.body;
 
     let result = null;
 
-    /* ---------------- FIND PR ---------------- */
-    if (intent === "FIND_PR") {
-      const keyword = q.replace(/what|is|the|pr|no|of/g, "").trim();
+    /* ================= RECORDS ================= */
+    if (module === "records") {
+      if (identifier?.prNo) {
+        const { data } = await supabase
+          .from("records")
+          .select("*")
+          .eq("pr_no", identifier.prNo)
+          .eq("is_deleted", false)
+          .single();
 
-      const { data } = await supabase
-        .from("records")
-        .select("pr_no, work_name, firm_name, amount")
-        .ilike("work_name", `%${keyword}%`)
-        .limit(1);
-
-      result = data?.[0] ? mapRecordRow(data[0]) : null;
-    }
-
-    /* ---------------- FILTER ---------------- */
-    else if (intent === "FILTER_RECORDS") {
-      const amountMatch = q.match(/(\d+)\s*(lakh|crore)?/);
-      let amount = 0;
-
-      if (amountMatch) {
-        amount = parseInt(amountMatch[1]);
-        if (amountMatch[2] === "lakh") amount *= 100000;
-        if (amountMatch[2] === "crore") amount *= 10000000;
+        result = data ? mapRecordRow(data) : null;
       }
-
-      const { data } = await supabase
-        .from("records")
-        .select("pr_no, work_name, amount")
-        .gt("amount", amount)
-        .limit(10);
-
-      result = data.map(mapRecordRow);
     }
 
-    /* ---------------- STATUS ---------------- */
-    else if (intent === "STATUS") {
-      const { data } = await supabase
-        .from("records")
-        .select("pr_no, work_name, status")
-        .eq("status", "Pending");
+    /* ================= ESTIMATES ================= */
+    else if (module === "estimates") {
+      if (identifier?.estimateNo) {
+        const { data } = await supabase
+          .from("estimates")
+          .select("*")
+          .eq("estimateNo", identifier.estimateNo)
+          .single();
 
-      result = data.map(mapRecordRow);
+        result = data ? mapEstimateRow(data) : null;
+      }
     }
 
-    /* ---------------- DETAILS ---------------- */
-    else if (intent === "DETAILS") {
-  const prNo = text.match(/\b\d{10}\b/)?.[0];
+    /* ================= DAILY ================= */
+    else if (module === "daily") {
+      if (identifier?.date) {
+        const { data } = await supabase
+          .from("daily_progress")
+          .select("*")
+          .eq("date", identifier.date)
+          .single();
 
-  const { data } = await supabase
-    .from("records")
-    .select("*")
-    .eq("pr_no", prNo)
-    .limit(1);
+        result = data;
+      }
+    }
 
- result = data?.[0] ? mapRecordRow(data[0]) : null;
-}
+    /* ================= CL ================= */
+    else if (module === "cl") {
+      if (identifier?.aadhar) {
+        const { data } = await supabase
+          .from("cl_biodata")
+          .select("*")
+          .eq("aadhar", identifier.aadhar)
+          .single();
 
+        result = data ? mapCLRow(data) : null;
+      }
+    }
+
+    if (!result) {
+      return res.json({
+        success: true,
+        result: null,
+        message: "No matching data found"
+      });
+    }
 
     res.json({ success: true, result });
 
@@ -1450,7 +1468,6 @@ app.post("/ai/query", authenticateToken, async (req, res) => {
 });
 
 
-
 // =================================================================
 // START SERVER
 // =================================================================
@@ -1459,6 +1476,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
