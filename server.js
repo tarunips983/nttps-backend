@@ -96,30 +96,53 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 // ---------------------------------------------
 function mapRecordRow(row) {
   if (!row) return null;
+
   return {
+    // 🔑 Identifiers
     id: row.id,
-    workName: row.work_name,
     prNo: row.pr_no,
-    subDivision: row.sub_division,
+
+    // 📄 Core PR data
+    workName: row.work_name,
     recordType: row.record_type,
     amount: row.amount,
-    sendTo: row.send_to,
-    pdfPath: row.pdf_url,
-    status: row.status,
-    isDeleted: row.is_deleted,
-    createdAt: row.created_at,
-    // NEW FIELDS
-    prDate: row.pr_date,
-    budgetHead: row.budget_head,
-    poNo: row.po_no,
-    prDate2: row.pr_date2,
-    firmName: row.firm_name,
+
+    // ✅ Status
+    status: row.status,           // Pending / Completed
+    prStatus: row.pr_status,      // PR Created / Sent etc.
+
+    // 🏢 Classification
     divisionLabel: row.division_label,
+    subDivision: row.sub_division,
+    sendTo: row.send_to,
+
+    // 🏭 Vendor / PO
+    firmName: row.firm_name,
+    poNo: row.po_no,
+    budgetHead: row.budget_head,
+
+    // 📅 Dates
+    prDate: row.pr_date,
+    prDate2: row.pr_date2,
+
+    // 📄 Document
+    pdfPath: row.pdf_url,
     pageNo: row.page_no,
     remarks: row.remarks,
     highValueSpares: row.high_value_spares,
+
+    // 👤 Responsibility
+    pendingWith: row.pending_with,
+    responsibleOfficer: row.responsible_officer,
+    lastUpdatedBy: row.last_updated_by,
+    lastUpdatedAt: row.last_updated_at,
+
+    // 🕒 System
+    createdAt: row.created_at,
+    isDeleted: row.is_deleted
   };
 }
+
 
 function mapDailyRow(row) {
   if (!row) return null;
@@ -1264,54 +1287,6 @@ app.get("/ai/search/estimates", async (req, res) => {
   res.json(data.map(mapEstimateRow));
 });
 
-function mapRecordRow(row) {
-  if (!row) return null;
-
-  return {
-    // 🔑 Identifiers
-    id: row.id,
-    prNo: row.pr_no,
-
-    // 📄 Core PR data
-    workName: row.work_name,
-    recordType: row.record_type,
-    amount: row.amount,
-
-    // ✅ Status (VERY IMPORTANT)
-    status: row.status,           // Pending / Completed
-    prStatus: row.pr_status,      // PR Created / Sent etc.
-
-    // 🏢 Classification
-    divisionLabel: row.division_label,
-    subDivision: row.sub_division,
-    sendTo: row.send_to,
-
-    // 🏭 Vendor / PO
-    firmName: row.firm_name,
-    poNo: row.po_no,
-    budgetHead: row.budget_head,
-
-    // 📅 Dates
-    prDate: row.pr_date,
-    prDate2: row.pr_date2,
-
-    // 📄 Document
-    pdfPath: row.pdf_url,
-    pageNo: row.page_no,
-    remarks: row.remarks,
-    highValueSpares: row.high_value_spares,
-
-    // 👤 Responsibility
-    pendingWith: row.pending_with,
-    responsibleOfficer: row.responsible_officer,
-    lastUpdatedBy: row.last_updated_by,
-    lastUpdatedAt: row.last_updated_at,
-
-    // 🕒 System
-    createdAt: row.created_at,
-    isDeleted: row.is_deleted
-  };
-}
 
 app.get("/ai/search/records", async (req, res) => {
   const q = req.query.q;
@@ -1484,6 +1459,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
