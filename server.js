@@ -1264,6 +1264,54 @@ app.get("/ai/search/estimates", async (req, res) => {
   res.json(data.map(mapEstimateRow));
 });
 
+function mapRecordRow(row) {
+  if (!row) return null;
+
+  return {
+    // 🔑 Identifiers
+    id: row.id,
+    prNo: row.pr_no,
+
+    // 📄 Core PR data
+    workName: row.work_name,
+    recordType: row.record_type,
+    amount: row.amount,
+
+    // ✅ Status (VERY IMPORTANT)
+    status: row.status,           // Pending / Completed
+    prStatus: row.pr_status,      // PR Created / Sent etc.
+
+    // 🏢 Classification
+    divisionLabel: row.division_label,
+    subDivision: row.sub_division,
+    sendTo: row.send_to,
+
+    // 🏭 Vendor / PO
+    firmName: row.firm_name,
+    poNo: row.po_no,
+    budgetHead: row.budget_head,
+
+    // 📅 Dates
+    prDate: row.pr_date,
+    prDate2: row.pr_date2,
+
+    // 📄 Document
+    pdfPath: row.pdf_url,
+    pageNo: row.page_no,
+    remarks: row.remarks,
+    highValueSpares: row.high_value_spares,
+
+    // 👤 Responsibility
+    pendingWith: row.pending_with,
+    responsibleOfficer: row.responsible_officer,
+    lastUpdatedBy: row.last_updated_by,
+    lastUpdatedAt: row.last_updated_at,
+
+    // 🕒 System
+    createdAt: row.created_at,
+    isDeleted: row.is_deleted
+  };
+}
 
 app.get("/ai/search/records", async (req, res) => {
   const q = req.query.q;
@@ -1271,13 +1319,20 @@ app.get("/ai/search/records", async (req, res) => {
 
   const { data, error } = await supabase
     .from("records")
-    .select("*")              // ✅ ALL HEADINGS
-    .ilike("work_name", `%${q}%`)
+    .select("*")
+    .eq("is_deleted", false)   // ✅ CRITICAL
+    .or(`pr_no.ilike.%${q}%,work_name.ilike.%${q}%`)
     .limit(1);
 
-  if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
+  if (error) {
+    console.error("AI search records error:", error);
+    return res.status(500).json([]);
+  }
+
+  res.json(data.map(mapRecordRow));
 });
+
+
 
 function mapDailyAIRow(row) {
   if (!row) return null;
@@ -1407,7 +1462,7 @@ app.post("/ai/query", authenticateToken, async (req, res) => {
     .eq("pr_no", prNo)
     .limit(1);
 
-  result = data?.[0] ? mapRecordRow(data[0]) : null;
+ result = data?.[0] ? mapRecordRow(data[0]) : null;
 }
 
 
@@ -1429,6 +1484,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
