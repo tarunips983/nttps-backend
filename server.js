@@ -1294,6 +1294,76 @@ app.get("/ai/search/cl", async (req, res) => {
 
 // ================= AI MEMORY =================
 
+app.post("/ai/query", authenticateToken, async (req, res) => {
+  try {
+    const { intent, text } = req.body;
+    const q = text.toLowerCase();
+
+    let result = null;
+
+    /* ---------------- FIND PR ---------------- */
+    if (intent === "FIND_PR") {
+      const keyword = q.replace(/what|is|the|pr|no|of/g, "").trim();
+
+      const { data } = await supabase
+        .from("records")
+        .select("pr_no, work_name, firm_name, amount")
+        .ilike("work_name", `%${keyword}%`)
+        .limit(1);
+
+      result = data?.[0] || null;
+    }
+
+    /* ---------------- FILTER ---------------- */
+    else if (intent === "FILTER_RECORDS") {
+      const amountMatch = q.match(/(\d+)\s*(lakh|crore)?/);
+      let amount = 0;
+
+      if (amountMatch) {
+        amount = parseInt(amountMatch[1]);
+        if (amountMatch[2] === "lakh") amount *= 100000;
+        if (amountMatch[2] === "crore") amount *= 10000000;
+      }
+
+      const { data } = await supabase
+        .from("records")
+        .select("pr_no, work_name, amount")
+        .gt("amount", amount)
+        .limit(10);
+
+      result = data;
+    }
+
+    /* ---------------- STATUS ---------------- */
+    else if (intent === "STATUS") {
+      const { data } = await supabase
+        .from("records")
+        .select("pr_no, work_name, status")
+        .eq("status", "Pending");
+
+      result = data;
+    }
+
+    /* ---------------- DETAILS ---------------- */
+    else if (intent === "DETAILS") {
+      const prNo = text.match(/\b\d{10}\b/)?.[0];
+
+      const { data } = await supabase
+        .from("records")
+        .select("*")
+        .eq("pr_no", prNo)
+        .limit(1);
+
+      result = data?.[0] || null;
+    }
+
+    res.json({ success: true, result });
+
+  } catch (err) {
+    console.error("AI QUERY ERROR:", err);
+    res.status(500).json({ success: false });
+  }
+});
 
 
 
@@ -1305,6 +1375,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
