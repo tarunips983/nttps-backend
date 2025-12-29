@@ -1235,19 +1235,35 @@ app.post("/ai/learn", authenticateToken, async (req, res) => {
   res.json({ success: true });
 });
 
+function mapEstimateRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    estimateNo: row.estimate_no,
+    description: row.description,
+    divisionLabel: row.division_label,
+    amount: row.amount,
+    poNo: row.po_no,
+    pageNo: row.page_no,
+    status: row.status,
+    createdAt: row.created_at
+  };
+}
 app.get("/ai/search/estimates", async (req, res) => {
   const q = req.query.q;
   if (!q) return res.json([]);
 
   const { data, error } = await supabase
     .from("estimates")
-    .select("*")              // ✅ ALL HEADINGS
+    .select("*")
     .ilike("description", `%${q}%`)
     .limit(1);
 
   if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
+
+  res.json(data.map(mapEstimateRow));
 });
+
 
 app.get("/ai/search/records", async (req, res) => {
   const q = req.query.q;
@@ -1263,33 +1279,70 @@ app.get("/ai/search/records", async (req, res) => {
   res.json(data);
 });
 
+function mapDailyAIRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    date: row.date,
+    activity: row.activity || "",
+    status: row.status || "",
+    manpower: row.manpower || "",
+    divisionLabel: row.division_label || ""
+  };
+}
 app.get("/ai/search/daily", async (req, res) => {
   const q = req.query.q;
   if (!q) return res.json([]);
 
   const { data, error } = await supabase
     .from("daily_progress")
-    .select("*")              // ✅ ALL HEADINGS
+    .select("*")
     .ilike("activity", `%${q}%`)
     .limit(1);
 
   if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
+
+  res.json(data.map(mapDailyAIRow));
 });
 
+function mapCLRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    name: row.name,
+    gender: row.gender,
+    aadhar: row.aadhar,
+    doj: row.doj,
+    wages: row.wages,
+    nominee: row.nominee,
+    relation: row.relation,
+    divisionLabel: row.division
+  };
+}
 app.get("/ai/search/cl", async (req, res) => {
   const q = req.query.q;
   if (!q) return res.json([]);
 
   const { data, error } = await supabase
     .from("cl_biodata")
-    .select("*")              // ✅ ALL HEADINGS
+    .select("*")
     .or(`name.ilike.%${q}%,aadhar.ilike.%${q}%`)
     .limit(1);
 
   if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
+
+  res.json(data.map(mapCLRow));
 });
+
+function mapFileRow(row) {
+  return {
+    id: row.id,
+    fileName: row.file_name,
+    fileUrl: row.file_url,
+    uploadedBy: row.uploaded_by,
+    expiresAt: row.expires_at
+  };
+}
 
 
 // ================= AI MEMORY =================
@@ -1311,7 +1364,7 @@ app.post("/ai/query", authenticateToken, async (req, res) => {
         .ilike("work_name", `%${keyword}%`)
         .limit(1);
 
-      result = data?.[0] || null;
+      result = data?.[0] ? mapRecordRow(data[0]) : null;
     }
 
     /* ---------------- FILTER ---------------- */
@@ -1331,7 +1384,7 @@ app.post("/ai/query", authenticateToken, async (req, res) => {
         .gt("amount", amount)
         .limit(10);
 
-      result = data;
+      result = data.map(mapRecordRow);
     }
 
     /* ---------------- STATUS ---------------- */
@@ -1341,21 +1394,22 @@ app.post("/ai/query", authenticateToken, async (req, res) => {
         .select("pr_no, work_name, status")
         .eq("status", "Pending");
 
-      result = data;
+      result = data.map(mapRecordRow);
     }
 
     /* ---------------- DETAILS ---------------- */
     else if (intent === "DETAILS") {
-      const prNo = text.match(/\b\d{10}\b/)?.[0];
+  const prNo = text.match(/\b\d{10}\b/)?.[0];
 
-      const { data } = await supabase
-        .from("records")
-        .select("*")
-        .eq("pr_no", prNo)
-        .limit(1);
+  const { data } = await supabase
+    .from("records")
+    .select("*")
+    .eq("pr_no", prNo)
+    .limit(1);
 
-      result = data?.[0] || null;
-    }
+  result = data?.[0] ? mapRecordRow(data[0]) : null;
+}
+
 
     res.json({ success: true, result });
 
@@ -1375,6 +1429,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
