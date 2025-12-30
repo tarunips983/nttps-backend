@@ -1366,6 +1366,21 @@ function mapCLRow(row) {
   };
 }
 
+
+const TABLES = {
+  records: "records",
+  estimates: "estimates",
+  daily: "daily_progress",
+  cl: "cl_biodata",
+  users: "users",
+  pending: "pending_users",
+  documents: "pr_documents",
+  remarks: "pr_remarks"
+};
+
+
+
+
 app.get("/ai/search/cl", async (req, res) => {
   const q = req.query.q;
   if (!q) return res.json([]);
@@ -1392,60 +1407,99 @@ function mapFileRow(row) {
 }
 
 
-// ================= AI MEMORY =================
-import { GoogleGenerativeAI } from "@google/generative-ai";
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
-app.post("/ai/query", authenticateToken, async (req, res) => {
+app.post("/ai/query", async (req, res) => {
   try {
-    const { text } = req.body;
-
-    if (!text) {
-      return res.json({ reply: "Please ask something." });
+    const question = (req.body.text || "").trim();
+    if (!question) {
+      return res.json({ reply: "Please ask a question." });
     }
 
-    const [records, estimates, daily, cl] = await Promise.all([
-      supabase.from("records").select("*").eq("is_deleted", false),
-      supabase.from("estimates").select("*"),
-      supabase.from("daily_progress").select("*"),
-      supabase.from("cl_biodata").select("*")
-    ]);
+    /* =====================================================
+       1️⃣ FAST PATTERN DETECTION (NO AI, NO TOKENS)
+       ===================================================== */
 
-    const prompt = `
-You are TM&CAM Smart Assistant.
+    // PR NUMBER
+    const prNo = question.match(/\b\d{10}\b/)?.[0];
 
-Rules:
-- Reply naturally to greetings like "hi"
-- Use database data when relevant
-- Use general knowledge if question is outside database
-- Never stay silent
+    // Aadhaar
+    const aadhaar = question.match(/\b\d{12}\b/)?.[0];
 
-User question:
-${text}
+    // Keywords
+    const q = question.toLowerCase();
 
-Database snapshot:
-${JSON.stringify({
-  records: records.data,
-  estimates: estimates.data,
-  daily: daily.data,
-  cl: cl.data
-})}
-`;
+    let table = null;
+    let query = null;
 
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash"
+    if (prNo) {
+      table = "records";
+      query = supabase.from("records").select("*").eq("prNo", prNo).limit(1);
+    }
+
+    else if (aadhaar) {
+      table = "cl_biodata";
+      query = supabase.from("cl_biodata").select("*").eq("aadhar", aadhaar).limit(1);
+    }
+
+    else if (q.includes("estimate")) {
+      table = "estimates";
+      query = supabase.from("estimates").select("*").limit(5);
+    }
+
+    else if (q.includes("daily") || q.includes("progress")) {
+      table = "daily_progress";
+      query = supabase.from("daily_progress").select("*").order("date", { ascending: false }).limit(5);
+    }
+
+    else if (q.includes("cl") || q.includes("bio")) {
+      table = "cl_biodata";
+      query = supabase.from("cl_biodata").select("*").limit(5);
+    }
+
+    else if (q.includes("pending")) {
+      table = "pending_users";
+      query = supabase.from("pending_users").select("*").limit(5);
+    }
+
+    /* =====================================================
+       2️⃣ EXECUTE DB QUERY (REAL DATA)
+       ===================================================== */
+    if (query) {
+      const { data, error } = await query;
+
+      if (error) {
+        console.error(error);
+        return res.json({ reply: "Database error occurred." });
+      }
+
+      if (!data || data.length === 0) {
+        return res.json({ reply: "No matching data found." });
+      }
+
+      return res.json({
+        reply: `Found ${data.length} record(s) from ${table}.`,
+        table,
+        data
+      });
+    }
+
+    /* =====================================================
+       3️⃣ ONLY NOW → AI (GENERAL QUESTIONS)
+       ===================================================== */
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+    const result = await model.generateContent(
+      `Answer clearly:\n${question}`
+    );
+
+    return res.json({
+      reply: result.response.text(),
+      source: "ai"
     });
 
-    const result = await model.generateContent(prompt);
-    const reply = result.response.text();
-
-    res.json({ reply });
-
   } catch (err) {
-    console.error("GEMINI ERROR:", err);
-    res.json({
-      reply: "AI service is temporarily unavailable. Please try again later."
+    console.error("AI QUERY ERROR:", err);
+    return res.json({
+      reply: "Service temporarily unavailable."
     });
   }
 });
@@ -1456,6 +1510,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
