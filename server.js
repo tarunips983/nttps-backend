@@ -10,7 +10,10 @@ import nodemailer from "nodemailer";
 import cron from "node-cron";
 import { createClient } from "@supabase/supabase-js";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.js";
-import OpenAI from "openai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE;
@@ -41,9 +44,6 @@ app.use(
 app.options("*", cors());
 
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
 
 
 
@@ -1394,89 +1394,54 @@ function mapFileRow(row) {
 
 
 // ================= AI MEMORY =================
-
-
 app.post("/ai/query", authenticateToken, async (req, res) => {
-  const { text } = req.body;
-
   try {
-    // 1️⃣ Load ALL database data (controlled)
-    const [
-      recordsRes,
-      estimatesRes,
-      dailyRes,
-      clRes
-    ] = await Promise.all([
+    const { text } = req.body;
+    if (!text) {
+      return res.json({ reply: "Please ask something." });
+    }
+
+    const [records, estimates, daily, cl] = await Promise.all([
       supabase.from("records").select("*").eq("is_deleted", false),
-      supabase.from("estimates").select("*").eq("is_deleted", false),
+      supabase.from("estimates").select("*"),
       supabase.from("daily_progress").select("*"),
       supabase.from("cl_biodata").select("*")
     ]);
 
-    const dbContext = {
-      records: recordsRes.data || [],
-      estimates: estimatesRes.data || [],
-      daily_progress: dailyRes.data || [],
-      cl_biodata: clRes.data || []
-    };
+    const prompt = `
+You are TM&CAM Smart Assistant.
+- Reply naturally to greetings.
+- Use database data if relevant.
+- Use general knowledge if not.
+- Never stay silent.
 
-    // 2️⃣ SYSTEM PROMPT (MOST IMPORTANT PART)
-    const systemPrompt = `
-You are "TM&CAM Smart Assistant", an intelligent AI for a power plant system.
+User question:
+${text}
 
-You MUST:
-- Reply to ALL messages (including hi, hello, help)
-- Answer naturally like a human assistant
-- Decide by yourself whether the question needs:
-  • database data
-  • general knowledge
-  • both
-- Use database data ONLY when relevant
-- Use your general knowledge if question is outside database
-- If data is missing, say so politely
-
-Database tables available:
-- records (PRs, PDFs)
-- estimates
-- daily_progress
-- cl_biodata
-
-Never say "I am an AI model".
-Never say "I don't have access".
-Answer professionally and clearly.
+Database snapshot:
+${JSON.stringify({
+  records: records.data,
+  estimates: estimates.data,
+  daily: daily.data,
+  cl: cl.data
+})}
 `;
 
-    // 3️⃣ USER PROMPT WITH OPTIONAL DB CONTEXT
-    const userPrompt = `
-User message:
-"${text}"
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-Database snapshot (may be empty if not needed):
-${JSON.stringify(dbContext, null, 2)}
-`;
+    const result = await model.generateContent(prompt);
+    const reply = result.response.text();
 
-    // 4️⃣ OPENAI CALL (REAL AI)
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt }
-      ],
-      temperature: 0.4
-    });
-
-    // 5️⃣ ALWAYS RETURN A REPLY
-    res.json({
-      reply: completion.choices[0].message.content
-    });
+    res.json({ reply });
 
   } catch (err) {
-    console.error("AI ERROR:", err);
-    res.status(500).json({
-      reply: "Sorry, I had trouble processing that. Please try again."
+    console.error("GEMINI ERROR:", err);
+    res.json({
+      reply: "AI service is temporarily unavailable. Please try again later."
     });
   }
 });
+
 
 
 const PORT = process.env.PORT || 3000;
@@ -1484,6 +1449,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
