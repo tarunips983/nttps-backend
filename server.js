@@ -1624,118 +1624,76 @@ app.post("/ai/query", async (req, res) => {
 }); */
 
 function detectIntent(text) {
-  const t = text.toLowerCase();
+  const t = text.toLowerCase().trim();
 
-  // Greeting
-  if (/\b(hi|hello|hey)\b/.test(t)) return { type: "GREETING" };
-
-  // Division
-  const div = t.match(/\b(tm&cam|em|c&i|mm|stage[-\s]?v|sd[-\s]?iv)\b/i);
-  const division = div ? div[0].toUpperCase() : null;
-
-  // Dates
-  const date = t.match(/\b\d{2}[-/]\d{2}[-/]\d{4}|\b\d{4}-\d{2}-\d{2}\b/)?.[0];
-
-  // PR
-  const pr = t.match(/\b10\d{8}\b/);
-  if (pr) {
-    if (t.includes("date")) return { type: "PR_COL", col: "pr_date", prNo: pr[0] };
-    if (t.includes("status")) return { type: "PR_COL", col: "status", prNo: pr[0] };
-    return { type: "PR_FULL", prNo: pr[0] };
+  /* ---------------- GREETING ---------------- */
+  if (/\b(hi|hello|hey|good morning|good evening)\b/.test(t)) {
+    return { type: "GREETING" };
   }
 
-  // Estimate
-  const est = t.match(/\b(13|21)\d{8}\b/);
-  if (est) return { type: "ESTIMATE_FULL", estimateNo: est[0] };
+  /* ---------------- DIVISION ---------------- */
+  const divMatch = t.match(/\b(tm&cam|em|c&i|mm|stage[-\s]?v|sd[-\s]?iv)\b/i);
+  const division = divMatch ? divMatch[0].toUpperCase() : null;
 
-  // CL Aadhaar
-  const aad = t.match(/\b\d{12}\b/);
-  if (aad) return { type: "CL_FULL", aadhar: aad[0] };
+  /* ---------------- DATE ---------------- */
+  const dateMatch =
+    t.match(/\b\d{2}[-/]\d{2}[-/]\d{4}\b/) ||
+    t.match(/\b\d{4}-\d{2}-\d{2}\b/);
+  const date = dateMatch ? dateMatch[0] : null;
 
-  // Module lists
-  if (t.includes("estimate")) return { type: "ESTIMATE_LIST", division };
-  if (t.includes("daily")) return { type: "DAILY_LIST", division };
-  if (t.includes("cl")) return { type: "CL_LIST", division };
+  /* ---------------- PR ---------------- */
+  const prMatch = t.match(/\b10\d{8}\b/);
+  if (prMatch) {
+    const prNo = prMatch[0];
 
+    // single column requests
+    if (t.includes("date")) {
+      return { type: "PR_COLUMN", column: "pr_date", prNo };
+    }
+    if (t.includes("status")) {
+      return { type: "PR_COLUMN", column: "status", prNo };
+    }
+    if (t.includes("amount") || t.includes("value")) {
+      return { type: "PR_COLUMN", column: "amount", prNo };
+    }
+
+    // full PR details
+    return { type: "PR_FULL", prNo };
+  }
+
+  /* ---------------- ESTIMATE ---------------- */
+  const estMatch = t.match(/\b(13|21)\d{8}\b/);
+  if (estMatch) {
+    return { type: "ESTIMATE_FULL", estimateNo: estMatch[0] };
+  }
+
+  if (t.includes("estimate")) {
+    return { type: "ESTIMATE_LIST", division };
+  }
+
+  /* ---------------- DAILY PROGRESS ---------------- */
+  if (t.includes("daily")) {
+    return { type: "DAILY_LIST", division, date };
+  }
+
+  /* ---------------- CL BIO DATA ---------------- */
+  const aadMatch = t.match(/\b\d{12}\b/);
+  if (aadMatch) {
+    return { type: "CL_FULL", aadhar: aadMatch[0] };
+  }
+
+  if (t.includes("cl")) {
+    return { type: "CL_LIST", division };
+  }
+
+  /* ---------------- FALLBACK ---------------- */
   return { type: "UNKNOWN" };
 }
 
-if (intent.type === "PR_FULL") {
-  const { data } = await supabase
-    .from("records")
-    .select("*")
-    .eq("pr_no", intent.prNo)
-    .eq("is_deleted", false)
-    .limit(1);
 
-  return res.json({ reply: "PR details:", columns: Object.keys(data[0]), data });
-}
-if (intent.type === "ESTIMATE_FULL") {
-  const { data } = await supabase
-    .from("estimates")
-    .select("*")
-    .eq("estimate_no", intent.estimateNo)
-    .limit(1);
 
-  return res.json({
-    reply: `Estimate ${intent.estimateNo} details:`,
-    columns: Object.keys(data[0]),
-    data
-  });
-}
-if (intent.type === "ESTIMATE_LIST") {
-  let q = supabase.from("estimates").select("*");
-  if (intent.division) q = q.eq("division_label", intent.division);
 
-  const { data } = await q.limit(10);
 
-  return res.json({
-    reply: "Estimate list:",
-    columns: Object.keys(data[0] || {}),
-    data
-  });
-}
-if (intent.type === "DAILY_LIST") {
-  let q = supabase
-    .from("daily_progress")
-    .select("*")
-    .order("date", { ascending: false });
-
-  if (intent.division) q = q.eq("division_label", intent.division);
-
-  const { data } = await q.limit(5);
-
-  return res.json({
-    reply: "Daily progress records:",
-    columns: Object.keys(data[0] || {}),
-    data
-  });
-}
-if (intent.type === "CL_FULL") {
-  const { data } = await supabase
-    .from("cl_biodata")
-    .select("*")
-    .eq("aadhar", intent.aadhar)
-    .limit(1);
-
-  return res.json({
-    reply: "CL bio data:",
-    columns: Object.keys(data[0]),
-    data
-  });
-}
-if (intent.type === "CL_LIST") {
-  let q = supabase.from("cl_biodata").select("*");
-  if (intent.division) q = q.eq("division_label", intent.division);
-
-  const { data } = await q.limit(10);
-
-  return res.json({
-    reply: "CL bio data list:",
-    columns: Object.keys(data[0] || {}),
-    data
-  });
-}
 app.get("/dashboard/summary", authenticateToken, async (req, res) => {
   const [prs, ests, daily, cls] = await Promise.all([
     supabase.from("records").select("*", { count: "exact", head: true }),
@@ -1814,22 +1772,67 @@ app.post("/ai/query", async (req, res) => {
     });
   }
 
-  // CL BIO DATA
-  if (intent.type === "CL_BY_AADHAAR") {
-    const { data } = await supabase
-      .from("cl_biodata")
-      .select("*")
-      .eq("aadhar", intent.aadhaar)
-      .limit(1);
+if (intent.type === "ESTIMATE_LIST") {
+  let q = supabase.from("estimates").select("*");
+  if (intent.division) q = q = q.eq("division", intent.division);
 
-    if (!data.length) return res.json({ reply: "No CL record found." });
+  const { data } = await q.limit(10);
 
-    return res.json({
-      reply: "CL Bio Data",
-      columns: Object.keys(data[0]),
-      data
-    });
+  return res.json({
+    reply: "Estimate list:",
+    columns: Object.keys(data[0] || {}),
+    data
+  });
+}
+  if (intent.type === "DAILY_LIST") {
+  let q = supabase
+    .from("daily_progress")
+    .select("*")
+    .order("date", { ascending: false });
+
+  if (intent.division) q = q = q.eq("division", intent.division);
+
+  const { data } = await q.limit(5);
+
+  return res.json({
+    reply: "Daily progress records:",
+    columns: Object.keys(data[0] || {}),
+    data
+  });
+}
+
+if (intent.type === "CL_FULL") {
+  const { data } = await supabase
+    .from("cl_biodata")
+    .select("*")
+    .eq("aadhar", intent.aadhar)
+    .limit(1);
+
+  if (!data || !data.length) {
+    return res.json({ reply: "No CL record found." });
   }
+
+  return res.json({
+    reply: "CL bio data:",
+    columns: Object.keys(data[0]),
+    data
+  });
+}
+
+
+
+if (intent.type === "CL_LIST") {
+  let q = supabase.from("cl_biodata").select("*");
+  if (intent.division) q = q = q.eq("division", intent.division);
+
+  const { data } = await q.limit(10);
+
+  return res.json({
+    reply: "CL bio data list:",
+    columns: Object.keys(data[0] || {}),
+    data
+  });
+}
 
   return res.json({
     reply: "I can help with PRs, Estimates, Daily progress, and CL data."
@@ -1842,6 +1845,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
