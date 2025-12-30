@@ -1626,40 +1626,133 @@ app.post("/ai/query", async (req, res) => {
 function detectIntent(text) {
   const t = text.toLowerCase();
 
-  if (t.match(/\bhi|hello|hey\b/)) {
-    return { type: "GREETING" };
-  }
+  // Greeting
+  if (/\b(hi|hello|hey)\b/.test(t)) return { type: "GREETING" };
 
-  // PR number (10 digits)
+  // Division
+  const div = t.match(/\b(tm&cam|em|c&i|mm|stage[-\s]?v|sd[-\s]?iv)\b/i);
+  const division = div ? div[0].toUpperCase() : null;
+
+  // Dates
+  const date = t.match(/\b\d{2}[-/]\d{2}[-/]\d{4}|\b\d{4}-\d{2}-\d{2}\b/)?.[0];
+
+  // PR
   const pr = t.match(/\b10\d{8}\b/);
   if (pr) {
-    if (t.includes("date")) {
-      return { type: "PR_COLUMN", prNo: pr[0], column: "pr_date" };
-    }
+    if (t.includes("date")) return { type: "PR_COL", col: "pr_date", prNo: pr[0] };
+    if (t.includes("status")) return { type: "PR_COL", col: "status", prNo: pr[0] };
     return { type: "PR_FULL", prNo: pr[0] };
   }
 
-  // Estimate number
+  // Estimate
   const est = t.match(/\b(13|21)\d{8}\b/);
-  if (est) {
-    return { type: "ESTIMATE_FULL", estimateNo: est[0] };
-  }
+  if (est) return { type: "ESTIMATE_FULL", estimateNo: est[0] };
 
-  if (t.includes("pending pr")) {
-    return { type: "PR_PENDING" };
-  }
+  // CL Aadhaar
+  const aad = t.match(/\b\d{12}\b/);
+  if (aad) return { type: "CL_FULL", aadhar: aad[0] };
 
-  if (t.includes("daily")) {
-    return { type: "DAILY_LATEST" };
-  }
-
-  const aadhaar = t.match(/\b\d{12}\b/);
-  if (aadhaar) {
-    return { type: "CL_BY_AADHAAR", aadhaar: aadhaar[0] };
-  }
+  // Module lists
+  if (t.includes("estimate")) return { type: "ESTIMATE_LIST", division };
+  if (t.includes("daily")) return { type: "DAILY_LIST", division };
+  if (t.includes("cl")) return { type: "CL_LIST", division };
 
   return { type: "UNKNOWN" };
 }
+
+if (intent.type === "PR_FULL") {
+  const { data } = await supabase
+    .from("records")
+    .select("*")
+    .eq("pr_no", intent.prNo)
+    .eq("is_deleted", false)
+    .limit(1);
+
+  return res.json({ reply: "PR details:", columns: Object.keys(data[0]), data });
+}
+if (intent.type === "ESTIMATE_FULL") {
+  const { data } = await supabase
+    .from("estimates")
+    .select("*")
+    .eq("estimate_no", intent.estimateNo)
+    .limit(1);
+
+  return res.json({
+    reply: `Estimate ${intent.estimateNo} details:`,
+    columns: Object.keys(data[0]),
+    data
+  });
+}
+if (intent.type === "ESTIMATE_LIST") {
+  let q = supabase.from("estimates").select("*");
+  if (intent.division) q = q.eq("division_label", intent.division);
+
+  const { data } = await q.limit(10);
+
+  return res.json({
+    reply: "Estimate list:",
+    columns: Object.keys(data[0] || {}),
+    data
+  });
+}
+if (intent.type === "DAILY_LIST") {
+  let q = supabase
+    .from("daily_progress")
+    .select("*")
+    .order("date", { ascending: false });
+
+  if (intent.division) q = q.eq("division_label", intent.division);
+
+  const { data } = await q.limit(5);
+
+  return res.json({
+    reply: "Daily progress records:",
+    columns: Object.keys(data[0] || {}),
+    data
+  });
+}
+if (intent.type === "CL_FULL") {
+  const { data } = await supabase
+    .from("cl_biodata")
+    .select("*")
+    .eq("aadhar", intent.aadhar)
+    .limit(1);
+
+  return res.json({
+    reply: "CL bio data:",
+    columns: Object.keys(data[0]),
+    data
+  });
+}
+if (intent.type === "CL_LIST") {
+  let q = supabase.from("cl_biodata").select("*");
+  if (intent.division) q = q.eq("division_label", intent.division);
+
+  const { data } = await q.limit(10);
+
+  return res.json({
+    reply: "CL bio data list:",
+    columns: Object.keys(data[0] || {}),
+    data
+  });
+}
+app.get("/dashboard/summary", authenticateToken, async (req, res) => {
+  const [prs, ests, daily, cls] = await Promise.all([
+    supabase.from("records").select("*", { count: "exact", head: true }),
+    supabase.from("estimates").select("*", { count: "exact", head: true }),
+    supabase.from("daily_progress").select("*", { count: "exact", head: true }),
+    supabase.from("cl_biodata").select("*", { count: "exact", head: true })
+  ]);
+
+  res.json({
+    records: prs.count,
+    estimates: ests.count,
+    daily_progress: daily.count,
+    cl_biodata: cls.count
+  });
+});
+
+
 
 app.post("/ai/query", async (req, res) => {
   const question = (req.body.query || "").trim();
@@ -1749,6 +1842,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
