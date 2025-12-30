@@ -1508,11 +1508,16 @@ Rules:
 JSON format:
 {
   "table": "table_name",
+  "columns": ["column_name"] | ["*"],
   "filters": {
     "column": "value"
   },
-  "limit": 5
+  "limit": 1
 }
+
+Rules for columns:
+- If user asks for a specific field, include ONLY that column
+- If user asks for full / complete / all details, use ["*"]
 
 If question is NOT about database, respond:
 { "type": "general" }
@@ -1531,15 +1536,11 @@ app.post("/ai/query", async (req, res) => {
       return res.json({ reply: "Please ask a question." });
     }
 
-    /* ==========================================
-       1️⃣ ASK AI FOR QUERY PLAN (JSON ONLY)
-       ========================================== */
     const model = genAI.getGenerativeModel({
       model: "gemini-2.5-flash"
     });
 
     const prompt = buildPlannerPrompt(question);
-
     const result = await model.generateContent(prompt);
     const raw = result.response.text().trim();
 
@@ -1547,14 +1548,10 @@ app.post("/ai/query", async (req, res) => {
     try {
       plan = JSON.parse(raw);
     } catch {
-      return res.json({
-        reply: "I could not understand the query clearly."
-      });
+      return res.json({ reply: "I could not understand the query clearly." });
     }
 
-    /* ==========================================
-       2️⃣ NON-DB QUESTIONS → NORMAL AI REPLY
-       ========================================== */
+    // Non-DB question
     if (plan.type === "general") {
       return res.json({
         reply: result.response.text(),
@@ -1562,9 +1559,7 @@ app.post("/ai/query", async (req, res) => {
       });
     }
 
-    /* ==========================================
-       3️⃣ VALIDATE QUERY PLAN
-       ========================================== */
+    // Validate table
     const allowedTables = [
       "records",
       "estimates",
@@ -1577,19 +1572,24 @@ app.post("/ai/query", async (req, res) => {
       return res.json({ reply: "Invalid table requested." });
     }
 
-    /* ==========================================
-       4️⃣ EXECUTE SAFE SUPABASE QUERY
-       ========================================== */
-    let query = supabase.from(plan.table).select("*");
+    // Build SELECT
+    const selectCols =
+      plan.columns && plan.columns.includes("*")
+        ? "*"
+        : (plan.columns || ["*"]).join(",");
 
+    let query = supabase
+      .from(plan.table)
+      .select(selectCols);
+
+    // Filters
     if (plan.filters) {
       for (const [col, val] of Object.entries(plan.filters)) {
         query = query.eq(col, val);
       }
     }
 
-    const limit = plan.limit && plan.limit <= 20 ? plan.limit : 5;
-
+    const limit = plan.limit && plan.limit <= 20 ? plan.limit : 1;
     const { data, error } = await query.limit(limit);
 
     if (error) {
@@ -1601,22 +1601,19 @@ app.post("/ai/query", async (req, res) => {
       return res.json({ reply: "No matching data found." });
     }
 
-    /* ==========================================
-       5️⃣ RETURN REAL DATA
-       ========================================== */
     return res.json({
-      reply: `Found ${data.length} result(s) from ${plan.table}.`,
+      reply: "Here is the requested information.",
       table: plan.table,
+      columns: plan.columns || ["*"],
       data
     });
 
   } catch (err) {
     console.error("AI QUERY ERROR:", err);
-    return res.json({
-      reply: "Service temporarily unavailable."
-    });
+    return res.json({ reply: "Service temporarily unavailable." });
   }
 });
+
 
 
 
@@ -1625,6 +1622,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
