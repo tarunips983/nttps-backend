@@ -10,9 +10,8 @@ import nodemailer from "nodemailer";
 import cron from "node-cron";
 import { createClient } from "@supabase/supabase-js";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.js";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
 
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -1394,9 +1393,14 @@ function mapFileRow(row) {
 
 
 // ================= AI MEMORY =================
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
 app.post("/ai/query", authenticateToken, async (req, res) => {
   try {
     const { text } = req.body;
+
     if (!text) {
       return res.json({ reply: "Please ask something." });
     }
@@ -1427,7 +1431,9 @@ ${JSON.stringify({
 })}
 `;
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({
+      model: "gemini-1.0-pro"
+    });
 
     const result = await model.generateContent(prompt);
     const reply = result.response.text();
@@ -1444,11 +1450,13 @@ ${JSON.stringify({
 
 
 
+
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
