@@ -1528,7 +1528,7 @@ User question:
 }
 
 
-
+/*
 app.post("/ai/query", async (req, res) => {
   try {
     const question = (req.body.text || "").trim();
@@ -1621,9 +1621,127 @@ app.post("/ai/query", async (req, res) => {
     console.error("AI QUERY ERROR:", err);
     return res.json({ reply: "Service temporarily unavailable." });
   }
+}); */
+
+function detectIntent(text) {
+  const t = text.toLowerCase();
+
+  if (t.match(/\bhi|hello|hey\b/)) {
+    return { type: "GREETING" };
+  }
+
+  // PR number (10 digits)
+  const pr = t.match(/\b10\d{8}\b/);
+  if (pr) {
+    if (t.includes("date")) {
+      return { type: "PR_COLUMN", prNo: pr[0], column: "pr_date" };
+    }
+    return { type: "PR_FULL", prNo: pr[0] };
+  }
+
+  // Estimate number
+  const est = t.match(/\b(13|21)\d{8}\b/);
+  if (est) {
+    return { type: "ESTIMATE_FULL", estimateNo: est[0] };
+  }
+
+  if (t.includes("pending pr")) {
+    return { type: "PR_PENDING" };
+  }
+
+  if (t.includes("daily")) {
+    return { type: "DAILY_LATEST" };
+  }
+
+  const aadhaar = t.match(/\b\d{12}\b/);
+  if (aadhaar) {
+    return { type: "CL_BY_AADHAAR", aadhaar: aadhaar[0] };
+  }
+
+  return { type: "UNKNOWN" };
+}
+
+app.post("/ai/query", async (req, res) => {
+  const question = (req.body.query || "").trim();
+  if (!question) return res.json({ reply: "Ask something." });
+
+  const intent = detectIntent(question);
+
+  // GREETING
+  if (intent.type === "GREETING") {
+    return res.json({ reply: "Hello 👋 How can I help you?" });
+  }
+
+  // PR FULL
+  if (intent.type === "PR_FULL") {
+    const { data } = await supabase
+      .from("records")
+      .select("*")
+      .eq("pr_no", intent.prNo)
+      .limit(1);
+
+    if (!data.length) return res.json({ reply: "PR not found." });
+
+    return res.json({
+      reply: `Details for PR ${intent.prNo}`,
+      columns: Object.keys(data[0]),
+      data
+    });
+  }
+
+  // PR SINGLE COLUMN
+  if (intent.type === "PR_COLUMN") {
+    const { data } = await supabase
+      .from("records")
+      .select(intent.column)
+      .eq("pr_no", intent.prNo)
+      .limit(1);
+
+    if (!data.length) return res.json({ reply: "PR not found." });
+
+    return res.json({
+      reply: `${intent.column.replace("_", " ")}: ${data[0][intent.column]}`
+    });
+  }
+
+  // ESTIMATE
+  if (intent.type === "ESTIMATE_FULL") {
+    const { data } = await supabase
+      .from("estimates")
+      .select("*")
+      .eq("estimate_no", intent.estimateNo)
+      .limit(1);
+
+    if (!data.length) return res.json({ reply: "Estimate not found." });
+
+    return res.json({
+      reply: `Estimate ${intent.estimateNo}`,
+      columns: Object.keys(data[0]),
+      data
+    });
+  }
+
+  // CL BIO DATA
+  if (intent.type === "CL_BY_AADHAAR") {
+    const { data } = await supabase
+      .from("cl_biodata")
+      .select("*")
+      .eq("aadhar", intent.aadhaar)
+      .limit(1);
+
+    if (!data.length) return res.json({ reply: "No CL record found." });
+
+    return res.json({
+      reply: "CL Bio Data",
+      columns: Object.keys(data[0]),
+      data
+    });
+  }
+
+  return res.json({
+    reply: "I can help with PRs, Estimates, Daily progress, and CL data."
+  });
 });
-
-
 
 
 const PORT = process.env.PORT || 3000;
@@ -1631,6 +1749,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
