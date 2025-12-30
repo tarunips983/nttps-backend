@@ -1757,7 +1757,9 @@ app.post("/ai/query", async (req, res) => {
     const { data } = await supabase
       .from("estimates")
       .select("*")
-      .eq("estimate_no", intent.estimateNo)
+      .or(
+  `estimate_no.eq.${intent.estimateNo},pr_no.eq.${intent.estimateNo}`
+)
       .limit(1);
 
     if (!data.length) return res.json({ reply: "Estimate not found." });
@@ -1830,6 +1832,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
