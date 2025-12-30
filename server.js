@@ -12,6 +12,9 @@ import { createClient } from "@supabase/supabase-js";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.js";
 
 
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -43,7 +46,87 @@ app.use(
 app.options("*", cors());
 
 
+const DB_SCHEMA = `
+Tables and columns:
 
+records:
+- id (bigint)
+- pr_no (text)
+- work_name (text)
+- record_type (text)
+- amount (numeric)
+- status (text)
+- pr_status (text)
+- division_label (text)
+- sub_division (text)
+- send_to (text)
+- firm_name (text)
+- po_no (text)
+- budget_head (text)
+- pr_date (text)
+- pr_date2 (text)
+- pdf_url (text)
+- page_no (text)
+- remarks (text)
+- high_value_spares (text)
+- pending_with (text)
+- responsible_officer (text)
+- last_updated_by (text)
+- last_updated_at (timestamp)
+- created_at (timestamp)
+- is_deleted (boolean)
+
+estimates:
+- id (bigint)
+- pr_no (text)
+- estimate_no (text)
+- description (text)
+- division_label (text)
+- po_no (text)
+- gross_amount (numeric)
+- net_amount (numeric)
+- loa_no (text)
+- sap_billing_doc (text)
+- mb_no (text)
+- page_no (text)
+- back_charging (text)
+- start_date (date)
+- status (text)
+- created_at (timestamp)
+
+daily_progress:
+- id (bigint)
+- date (date)
+- activity (text)
+- manpower (text)
+- status (text)
+- division_label (text)
+- table_html (text)
+- row_count (integer)
+- created_at (timestamp)
+
+cl_biodata:
+- id (bigint)
+- name (text)
+- gender (text)
+- aadhar (text)
+- phone (text)
+- station (text)
+- division (text)
+- doj (text)
+- dob (text)
+- wages (numeric)
+- nominee (text)
+- relation (text)
+- photo_url (text)
+- created_at (timestamp)
+
+pending_users:
+- id (bigint)
+- name (text)
+- reason (text)
+- created_at (timestamp)
+`;
 
 
 // ---------------------------------------------
@@ -1407,6 +1490,40 @@ function mapFileRow(row) {
 }
 
 
+function buildPlannerPrompt(question) {
+  return `
+You are an AI that converts user questions into database query plans.
+
+Database schema:
+${DB_SCHEMA}
+
+Rules:
+- Output ONLY valid JSON
+- No explanations
+- No markdown
+- No extra text
+- Never invent tables or columns
+- Use only schema above
+
+JSON format:
+{
+  "table": "table_name",
+  "filters": {
+    "column": "value"
+  },
+  "limit": 5
+}
+
+If question is NOT about database, respond:
+{ "type": "general" }
+
+User question:
+"${question}"
+`;
+}
+
+
+
 app.post("/ai/query", async (req, res) => {
   try {
     const question = (req.body.text || "").trim();
@@ -1414,86 +1531,83 @@ app.post("/ai/query", async (req, res) => {
       return res.json({ reply: "Please ask a question." });
     }
 
-    /* =====================================================
-       1️⃣ FAST PATTERN DETECTION (NO AI, NO TOKENS)
-       ===================================================== */
+    /* ==========================================
+       1️⃣ ASK AI FOR QUERY PLAN (JSON ONLY)
+       ========================================== */
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.5-flash"
+    });
 
-    // PR NUMBER
-    const prNo = question.match(/\b\d{10}\b/)?.[0];
+    const prompt = buildPlannerPrompt(question);
 
-    // Aadhaar
-    const aadhaar = question.match(/\b\d{12}\b/)?.[0];
+    const result = await model.generateContent(prompt);
+    const raw = result.response.text().trim();
 
-    // Keywords
-    const q = question.toLowerCase();
-
-    let table = null;
-    let query = null;
-
-    if (prNo) {
-      table = "records";
-      query = supabase.from("records").select("*").eq("prNo", prNo).limit(1);
-    }
-
-    else if (aadhaar) {
-      table = "cl_biodata";
-      query = supabase.from("cl_biodata").select("*").eq("aadhar", aadhaar).limit(1);
-    }
-
-    else if (q.includes("estimate")) {
-      table = "estimates";
-      query = supabase.from("estimates").select("*").limit(5);
-    }
-
-    else if (q.includes("daily") || q.includes("progress")) {
-      table = "daily_progress";
-      query = supabase.from("daily_progress").select("*").order("date", { ascending: false }).limit(5);
-    }
-
-    else if (q.includes("cl") || q.includes("bio")) {
-      table = "cl_biodata";
-      query = supabase.from("cl_biodata").select("*").limit(5);
-    }
-
-    else if (q.includes("pending")) {
-      table = "pending_users";
-      query = supabase.from("pending_users").select("*").limit(5);
-    }
-
-    /* =====================================================
-       2️⃣ EXECUTE DB QUERY (REAL DATA)
-       ===================================================== */
-    if (query) {
-      const { data, error } = await query;
-
-      if (error) {
-        console.error(error);
-        return res.json({ reply: "Database error occurred." });
-      }
-
-      if (!data || data.length === 0) {
-        return res.json({ reply: "No matching data found." });
-      }
-
+    let plan;
+    try {
+      plan = JSON.parse(raw);
+    } catch {
       return res.json({
-        reply: `Found ${data.length} record(s) from ${table}.`,
-        table,
-        data
+        reply: "I could not understand the query clearly."
       });
     }
 
-    /* =====================================================
-       3️⃣ ONLY NOW → AI (GENERAL QUESTIONS)
-       ===================================================== */
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    /* ==========================================
+       2️⃣ NON-DB QUESTIONS → NORMAL AI REPLY
+       ========================================== */
+    if (plan.type === "general") {
+      return res.json({
+        reply: result.response.text(),
+        source: "ai"
+      });
+    }
 
-    const result = await model.generateContent(
-      `Answer clearly:\n${question}`
-    );
+    /* ==========================================
+       3️⃣ VALIDATE QUERY PLAN
+       ========================================== */
+    const allowedTables = [
+      "records",
+      "estimates",
+      "daily_progress",
+      "cl_biodata",
+      "pending_users"
+    ];
 
+    if (!allowedTables.includes(plan.table)) {
+      return res.json({ reply: "Invalid table requested." });
+    }
+
+    /* ==========================================
+       4️⃣ EXECUTE SAFE SUPABASE QUERY
+       ========================================== */
+    let query = supabase.from(plan.table).select("*");
+
+    if (plan.filters) {
+      for (const [col, val] of Object.entries(plan.filters)) {
+        query = query.eq(col, val);
+      }
+    }
+
+    const limit = plan.limit && plan.limit <= 20 ? plan.limit : 5;
+
+    const { data, error } = await query.limit(limit);
+
+    if (error) {
+      console.error(error);
+      return res.json({ reply: "Database query failed." });
+    }
+
+    if (!data || data.length === 0) {
+      return res.json({ reply: "No matching data found." });
+    }
+
+    /* ==========================================
+       5️⃣ RETURN REAL DATA
+       ========================================== */
     return res.json({
-      reply: result.response.text(),
-      source: "ai"
+      reply: `Found ${data.length} result(s) from ${plan.table}.`,
+      table: plan.table,
+      data
     });
 
   } catch (err) {
@@ -1505,11 +1619,13 @@ app.post("/ai/query", async (req, res) => {
 });
 
 
+
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
