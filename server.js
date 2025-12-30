@@ -1662,13 +1662,10 @@ function detectIntent(text) {
   }
 
   /* ---------------- ESTIMATE ---------------- */
-  const estMatch = t.match(/\b(13|21)\d{8}\b/);
+  
+   const estMatch = t.match(/\b(13|21)\d{8}\b/);
   if (estMatch) {
     return { type: "ESTIMATE_FULL", estimateNo: estMatch[0] };
-  }
-
-  if (t.includes("estimate")) {
-    return { type: "ESTIMATE_LIST", division };
   }
 
   /* ---------------- DAILY PROGRESS ---------------- */
@@ -1772,18 +1769,6 @@ app.post("/ai/query", async (req, res) => {
     });
   }
 
-if (intent.type === "ESTIMATE_LIST") {
-  let q = supabase.from("estimates").select("*");
-  if (intent.division) q = q = q.eq("division", intent.division);
-
-  const { data } = await q.limit(10);
-
-  return res.json({
-    reply: "Estimate list:",
-    columns: Object.keys(data[0] || {}),
-    data
-  });
-}
   if (intent.type === "DAILY_LIST") {
   let q = supabase
     .from("daily_progress")
@@ -1845,6 +1830,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
