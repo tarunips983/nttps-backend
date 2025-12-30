@@ -1414,10 +1414,12 @@ app.post("/ai/query", authenticateToken, async (req, res) => {
 
     const prompt = `
 You are TM&CAM Smart Assistant.
-- Reply naturally to greetings.
-- Use database data if relevant.
-- Use general knowledge if not.
-- Never stay silent.
+
+Rules:
+- Reply naturally to greetings like "hi"
+- Use database data when relevant
+- Use general knowledge if question is outside database
+- Never stay silent
 
 User question:
 ${text}
@@ -1432,7 +1434,7 @@ ${JSON.stringify({
 `;
 
     const model = genAI.getGenerativeModel({
-      model: "gemini-1.0-pro"
+      model: "gemini-pro"
     });
 
     const result = await model.generateContent(prompt);
@@ -1449,13 +1451,12 @@ ${JSON.stringify({
 });
 
 
-
-
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
