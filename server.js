@@ -1394,69 +1394,101 @@ function mapFileRow(row) {
 
 
 // ================= AI MEMORY =================
+import OpenAI from "openai";
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+});
 
 app.post("/ai/query", authenticateToken, async (req, res) => {
   const { text } = req.body;
 
   try {
-    // 1️⃣ Load live data
-    const [records, estimates, daily, cl] = await Promise.all([
+    // 1️⃣ Load ALL database data (controlled)
+    const [
+      recordsRes,
+      estimatesRes,
+      dailyRes,
+      clRes
+    ] = await Promise.all([
       supabase.from("records").select("*").eq("is_deleted", false),
       supabase.from("estimates").select("*").eq("is_deleted", false),
       supabase.from("daily_progress").select("*"),
       supabase.from("cl_biodata").select("*")
     ]);
 
-    // 2️⃣ Send EVERYTHING to AI (controlled)
+    const dbContext = {
+      records: recordsRes.data || [],
+      estimates: estimatesRes.data || [],
+      daily_progress: dailyRes.data || [],
+      cl_biodata: clRes.data || []
+    };
+
+    // 2️⃣ SYSTEM PROMPT (MOST IMPORTANT PART)
+    const systemPrompt = `
+You are "TM&CAM Smart Assistant", an intelligent AI for a power plant system.
+
+You MUST:
+- Reply to ALL messages (including hi, hello, help)
+- Answer naturally like a human assistant
+- Decide by yourself whether the question needs:
+  • database data
+  • general knowledge
+  • both
+- Use database data ONLY when relevant
+- Use your general knowledge if question is outside database
+- If data is missing, say so politely
+
+Database tables available:
+- records (PRs, PDFs)
+- estimates
+- daily_progress
+- cl_biodata
+
+Never say "I am an AI model".
+Never say "I don't have access".
+Answer professionally and clearly.
+`;
+
+    // 3️⃣ USER PROMPT WITH OPTIONAL DB CONTEXT
+    const userPrompt = `
+User message:
+"${text}"
+
+Database snapshot (may be empty if not needed):
+${JSON.stringify(dbContext, null, 2)}
+`;
+
+    // 4️⃣ OPENAI CALL (REAL AI)
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
-        {
-          role: "system",
-          content: `
-You are an enterprise data assistant for a power plant.
-You MUST answer using only the provided data.
-If user asks to update data, respond with JSON instructions.
-`
-        },
-        {
-          role: "user",
-          content: `
-USER QUESTION:
-${text}
-
-RECORDS:
-${JSON.stringify(records.data)}
-
-ESTIMATES:
-${JSON.stringify(estimates.data)}
-
-DAILY:
-${JSON.stringify(daily.data)}
-
-CL:
-${JSON.stringify(cl.data)}
-`
-        }
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt }
       ],
-      temperature: 0.1
+      temperature: 0.4
     });
 
+    // 5️⃣ ALWAYS RETURN A REPLY
     res.json({
-      result: completion.choices[0].message.content
+      reply: completion.choices[0].message.content
     });
 
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "AI processing failed" });
+    console.error("AI ERROR:", err);
+    res.status(500).json({
+      reply: "Sorry, I had trouble processing that. Please try again."
+    });
   }
 });
+
 
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
