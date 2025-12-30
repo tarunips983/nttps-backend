@@ -1394,11 +1394,7 @@ function mapFileRow(row) {
 
 
 // ================= AI MEMORY =================
-import OpenAI from "openai";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
 
 app.post("/ai/query", authenticateToken, async (req, res) => {
   const { text } = req.body;
@@ -1488,6 +1484,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
