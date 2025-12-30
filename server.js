@@ -1552,12 +1552,21 @@ app.post("/ai/query", async (req, res) => {
     }
 
     // Non-DB question
-    if (plan.type === "general") {
-      return res.json({
-        reply: result.response.text(),
-        source: "ai"
-      });
-    }
+   if (plan.type === "general") {
+  // Ask AI normally (no planner, no schema)
+  const chatModel = genAI.getGenerativeModel({
+    model: "gemini-2.5-flash"
+  });
+
+  const chatResult = await chatModel.generateContent(
+    `User: ${question}\nAI:`
+  );
+
+  return res.json({
+    reply: chatResult.response.text().trim()
+  });
+}
+
 
     // Validate table
     const allowedTables = [
@@ -1622,6 +1631,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
