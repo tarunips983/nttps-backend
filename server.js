@@ -1434,7 +1434,7 @@ ${JSON.stringify({
 `;
 
     const model = genAI.getGenerativeModel({
-      model: "gemini-pro"
+      model: "gemini-2.5-flash"
     });
 
     const result = await model.generateContent(prompt);
@@ -1456,6 +1456,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
