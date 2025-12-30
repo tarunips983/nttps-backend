@@ -10,6 +10,7 @@ import nodemailer from "nodemailer";
 import cron from "node-cron";
 import { createClient } from "@supabase/supabase-js";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.js";
+import OpenAI from "openai";
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE;
@@ -40,7 +41,9 @@ app.use(
 app.options("*", cors());
 
 
-
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+});
 
 
 
@@ -1393,89 +1396,68 @@ function mapFileRow(row) {
 // ================= AI MEMORY =================
 
 app.post("/ai/query", authenticateToken, async (req, res) => {
+  const { text } = req.body;
+
   try {
-    const { module, identifier, intent } = req.body;
+    // 1️⃣ Load live data
+    const [records, estimates, daily, cl] = await Promise.all([
+      supabase.from("records").select("*").eq("is_deleted", false),
+      supabase.from("estimates").select("*").eq("is_deleted", false),
+      supabase.from("daily_progress").select("*"),
+      supabase.from("cl_biodata").select("*")
+    ]);
 
-    let result = null;
+    // 2️⃣ Send EVERYTHING to AI (controlled)
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `
+You are an enterprise data assistant for a power plant.
+You MUST answer using only the provided data.
+If user asks to update data, respond with JSON instructions.
+`
+        },
+        {
+          role: "user",
+          content: `
+USER QUESTION:
+${text}
 
-    /* ================= RECORDS ================= */
-    if (module === "records") {
-      if (identifier?.prNo) {
-        const { data } = await supabase
-          .from("records")
-          .select("*")
-          .eq("pr_no", identifier.prNo)
-          .eq("is_deleted", false)
-          .single();
+RECORDS:
+${JSON.stringify(records.data)}
 
-        result = data ? mapRecordRow(data) : null;
-      }
-    }
+ESTIMATES:
+${JSON.stringify(estimates.data)}
 
-    /* ================= ESTIMATES ================= */
-    else if (module === "estimates") {
-      if (identifier?.estimateNo) {
-        const { data } = await supabase
-          .from("estimates")
-          .select("*")
-          .eq("estimateNo", identifier.estimateNo)
-          .single();
+DAILY:
+${JSON.stringify(daily.data)}
 
-        result = data ? mapEstimateRow(data) : null;
-      }
-    }
+CL:
+${JSON.stringify(cl.data)}
+`
+        }
+      ],
+      temperature: 0.1
+    });
 
-    /* ================= DAILY ================= */
-    else if (module === "daily") {
-      if (identifier?.date) {
-        const { data } = await supabase
-          .from("daily_progress")
-          .select("*")
-          .eq("date", identifier.date)
-          .single();
-
-        result = data;
-      }
-    }
-
-    /* ================= CL ================= */
-    else if (module === "cl") {
-      if (identifier?.aadhar) {
-        const { data } = await supabase
-          .from("cl_biodata")
-          .select("*")
-          .eq("aadhar", identifier.aadhar)
-          .single();
-
-        result = data ? mapCLRow(data) : null;
-      }
-    }
-
-    if (!result) {
-      return res.json({
-        success: true,
-        result: null,
-        message: "No matching data found"
-      });
-    }
-
-    res.json({ success: true, result });
+    res.json({
+      result: completion.choices[0].message.content
+    });
 
   } catch (err) {
-    console.error("AI QUERY ERROR:", err);
-    res.status(500).json({ success: false });
+    console.error(err);
+    res.status(500).json({ error: "AI processing failed" });
   }
 });
 
-
-// =================================================================
-// START SERVER
-// =================================================================
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
