@@ -1710,120 +1710,146 @@ app.get("/dashboard/summary", authenticateToken, async (req, res) => {
 
 
 app.post("/ai/query", async (req, res) => {
-  const question = (req.body.query || "").trim();
-  if (!question) return res.json({ reply: "Ask something." });
+  try {
+    const question = (req.body.query || "").trim();
+    if (!question) {
+      return res.json({ reply: "Ask something." });
+    }
 
-  const intent = detectIntent(question);
+    const intent = detectIntent(question);
 
-  // GREETING
-  if (intent.type === "GREETING") {
-    return res.json({ reply: "Hello 👋 How can I help you?" });
-  }
+    // GREETING
+    if (intent.type === "GREETING") {
+      return res.json({ reply: "Hello 👋 How can I help you?" });
+    }
 
-  // PR FULL
-  if (intent.type === "PR_FULL") {
-    const { data } = await supabase
-      .from("records")
-      .select("*")
-      .eq("pr_no", intent.prNo)
-      .limit(1);
+    // PR FULL
+    if (intent.type === "PR_FULL") {
+      const { data, error } = await supabase
+        .from("records")
+        .select("*")
+        .eq("pr_no", intent.prNo)
+        .limit(1);
 
-    if (!data.length) return res.json({ reply: "PR not found." });
+      if (error) throw error;
+      if (!data || !data.length) {
+        return res.json({ reply: "PR not found." });
+      }
 
+      return res.json({
+        reply: `Details for PR ${intent.prNo}`,
+        columns: Object.keys(data[0]),
+        data
+      });
+    }
+
+    // PR COLUMN
+    if (intent.type === "PR_COLUMN") {
+      const { data, error } = await supabase
+        .from("records")
+        .select(intent.column)
+        .eq("pr_no", intent.prNo)
+        .limit(1);
+
+      if (error) throw error;
+      if (!data || !data.length) {
+        return res.json({ reply: "PR not found." });
+      }
+
+      return res.json({
+        reply: `${intent.column.replace("_", " ")}: ${data[0][intent.column]}`
+      });
+    }
+
+    // ESTIMATE
+    if (intent.type === "ESTIMATE_FULL") {
+      const { data, error } = await supabase
+        .from("estimates")
+        .select("*")
+        .or(
+          `estimate_no.eq.${intent.estimateNo},pr_no.eq.${intent.estimateNo}`
+        )
+        .limit(1);
+
+      if (error) throw error;
+      if (!data || !data.length) {
+        return res.json({ reply: "Estimate not found." });
+      }
+
+      return res.json({
+        reply: `Estimate ${intent.estimateNo}`,
+        columns: Object.keys(data[0]),
+        data
+      });
+    }
+
+    // DAILY
+    if (intent.type === "DAILY_LIST") {
+      let q = supabase
+        .from("daily_progress")
+        .select("*")
+        .order("date", { ascending: false });
+
+      if (intent.division) q = q.eq("division", intent.division);
+
+      const { data, error } = await q.limit(5);
+      if (error) throw error;
+
+      return res.json({
+        reply: "Daily progress records:",
+        columns: data.length ? Object.keys(data[0]) : [],
+        data
+      });
+    }
+
+    // CL FULL
+    if (intent.type === "CL_FULL") {
+      const { data, error } = await supabase
+        .from("cl_biodata")
+        .select("*")
+        .eq("aadhar", intent.aadhar)
+        .limit(1);
+
+      if (error) throw error;
+      if (!data || !data.length) {
+        return res.json({ reply: "No CL record found." });
+      }
+
+      return res.json({
+        reply: "CL bio data:",
+        columns: Object.keys(data[0]),
+        data
+      });
+    }
+
+    // CL LIST
+    if (intent.type === "CL_LIST") {
+      let q = supabase.from("cl_biodata").select("*");
+      if (intent.division) q = q.eq("division", intent.division);
+
+      const { data, error } = await q.limit(10);
+      if (error) throw error;
+
+      return res.json({
+        reply: "CL bio data list:",
+        columns: data.length ? Object.keys(data[0]) : [],
+        data
+      });
+    }
+
+    // FALLBACK
     return res.json({
-      reply: `Details for PR ${intent.prNo}`,
-      columns: Object.keys(data[0]),
-      data
+      reply: "I can help with PRs, Estimates, Daily progress, and CL data."
+    });
+
+  } catch (err) {
+    console.error("AI QUERY ERROR:", err);
+
+    return res.status(500).json({
+      reply: "Unable to process request.",
+      error: err.message
     });
   }
-
-  // PR SINGLE COLUMN
-  if (intent.type === "PR_COLUMN") {
-    const { data } = await supabase
-      .from("records")
-      .select(intent.column)
-      .eq("pr_no", intent.prNo)
-      .limit(1);
-
-    if (!data.length) return res.json({ reply: "PR not found." });
-
-    return res.json({
-      reply: `${intent.column.replace("_", " ")}: ${data[0][intent.column]}`
-    });
-  }
-
-  // ESTIMATE
-  if (intent.type === "ESTIMATE_FULL") {
-    const { data } = await supabase
-      .from("estimates")
-      .select("*")
-      .or(
-  `estimate_no.eq.${intent.estimateNo},pr_no.eq.${intent.estimateNo}`
-)
-      .limit(1);
-
-    if (!data.length) return res.json({ reply: "Estimate not found." });
-
-    return res.json({
-      reply: `Estimate ${intent.estimateNo}`,
-      columns: Object.keys(data[0]),
-      data
-    });
-  }
-
-  if (intent.type === "DAILY_LIST") {
-  let q = supabase
-    .from("daily_progress")
-    .select("*")
-    .order("date", { ascending: false });
-
-  if (intent.division) q = q = q.eq("division", intent.division);
-
-  const { data } = await q.limit(5);
-
-  return res.json({
-    reply: "Daily progress records:",
-    columns: Object.keys(data[0] || {}),
-    data
-  });
-}
-
-if (intent.type === "CL_FULL") {
-  const { data } = await supabase
-    .from("cl_biodata")
-    .select("*")
-    .eq("aadhar", intent.aadhar)
-    .limit(1);
-
-  if (!data || !data.length) {
-    return res.json({ reply: "No CL record found." });
-  }
-
-  return res.json({
-    reply: "CL bio data:",
-    columns: Object.keys(data[0]),
-    data
-  });
-}
-
-
-
-if (intent.type === "CL_LIST") {
-  let q = supabase.from("cl_biodata").select("*");
-  if (intent.division) q = q = q.eq("division", intent.division);
-
-  const { data } = await q.limit(10);
-
-  return res.json({
-    reply: "CL bio data list:",
-    columns: Object.keys(data[0] || {}),
-    data
-  });
-}
-
-  return res.json({
-    reply: "I can help with PRs, Estimates, Daily progress, and CL data."
-  });
 });
 
 
@@ -1832,6 +1858,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
