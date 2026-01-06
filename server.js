@@ -1623,69 +1623,13 @@ app.post("/ai/query", async (req, res) => {
   }
 }); */
 
-function detectIntent(text) {
-  const t = text.toLowerCase().trim();
+const aiRes = await fetch("https://nttps-ai.onrender.com/analyze", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ text: question })
+});
 
-  /* ---------------- GREETING ---------------- */
-  if (/\b(hi|hello|hey|good morning|good evening)\b/.test(t)) {
-    return { type: "GREETING" };
-  }
-
-  /* ---------------- DIVISION ---------------- */
-  const divMatch = t.match(/\b(tm&cam|em|c&i|mm|stage[-\s]?v|sd[-\s]?iv)\b/i);
-  const division = divMatch ? divMatch[0].toUpperCase() : null;
-
-  /* ---------------- DATE ---------------- */
-  const dateMatch =
-    t.match(/\b\d{2}[-/]\d{2}[-/]\d{4}\b/) ||
-    t.match(/\b\d{4}-\d{2}-\d{2}\b/);
-  const date = dateMatch ? dateMatch[0] : null;
-
-  /* ---------------- PR ---------------- */
-  const prMatch = t.match(/\b10\d{8}\b/);
-  if (prMatch) {
-    const prNo = prMatch[0];
-
-    // single column requests
-    if (t.includes("date")) {
-      return { type: "PR_COLUMN", column: "pr_date", prNo };
-    }
-    if (t.includes("status")) {
-      return { type: "PR_COLUMN", column: "status", prNo };
-    }
-    if (t.includes("amount") || t.includes("value")) {
-      return { type: "PR_COLUMN", column: "amount", prNo };
-    }
-
-    // full PR details
-    return { type: "PR_FULL", prNo };
-  }
-
-  /* ---------------- ESTIMATE ---------------- */
-  
-   const estMatch = t.match(/\b(13|21)\d{8}\b/);
-  if (estMatch) {
-    return { type: "ESTIMATE_FULL", estimateNo: estMatch[0] };
-  }
-
-  /* ---------------- DAILY PROGRESS ---------------- */
-  if (t.includes("daily")) {
-    return { type: "DAILY_LIST", division, date };
-  }
-
-  /* ---------------- CL BIO DATA ---------------- */
-  const aadMatch = t.match(/\b\d{12}\b/);
-  if (aadMatch) {
-    return { type: "CL_FULL", aadhar: aadMatch[0] };
-  }
-
-  if (t.includes("cl")) {
-    return { type: "CL_LIST", division };
-  }
-
-  /* ---------------- FALLBACK ---------------- */
-  return { type: "UNKNOWN" };
-}
+const intent = await aiRes.json();
 
 
 
@@ -1716,7 +1660,22 @@ app.post("/ai/query", async (req, res) => {
       return res.json({ reply: "Ask something." });
     }
 
-    const intent = detectIntent(question);
+    // 🔥 CALL PYTHON AI
+    const aiRes = await fetch("https://nttps-ai.onrender.com/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: question })
+    });
+
+    if (!aiRes.ok) {
+      throw new Error("Python AI server not responding");
+    }
+
+    const intent = await aiRes.json();
+
+    console.log("AI INTENT:", intent); // <-- keep this for debugging
+
+    // ================== NOW YOUR OLD LOGIC CONTINUES ==================
 
     // GREETING
     if (intent.type === "GREETING") {
@@ -1853,11 +1812,13 @@ app.post("/ai/query", async (req, res) => {
 });
 
 
+
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
