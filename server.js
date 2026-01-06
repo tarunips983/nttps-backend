@@ -1622,19 +1622,6 @@ app.post("/ai/query", async (req, res) => {
     return res.json({ reply: "Service temporarily unavailable." });
   }
 }); */
-
-const aiRes = await fetch("https://nttps-ai.onrender.com/analyze", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ text: question })
-});
-
-const intent = await aiRes.json();
-
-
-
-
-
 app.get("/dashboard/summary", authenticateToken, async (req, res) => {
   const [prs, ests, daily, cls] = await Promise.all([
     supabase.from("records").select("*", { count: "exact", head: true }),
@@ -1818,6 +1805,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
