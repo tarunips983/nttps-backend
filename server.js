@@ -1528,100 +1528,6 @@ User question:
 }
 
 
-/*
-app.post("/ai/query", async (req, res) => {
-  try {
-    const question = (req.body.text || "").trim();
-    if (!question) {
-      return res.json({ reply: "Please ask a question." });
-    }
-
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash"
-    });
-
-    const prompt = buildPlannerPrompt(question);
-    const result = await model.generateContent(prompt);
-    const raw = result.response.text().trim();
-
-    let plan;
-    try {
-      plan = JSON.parse(raw);
-    } catch {
-      return res.json({ reply: "I could not understand the query clearly." });
-    }
-
-    // Non-DB question
-   if (plan.type === "general") {
-  // Ask AI normally (no planner, no schema)
-  const chatModel = genAI.getGenerativeModel({
-    model: "gemini-2.5-flash"
-  });
-
-  const chatResult = await chatModel.generateContent(
-    `User: ${question}\nAI:`
-  );
-
-  return res.json({
-    reply: chatResult.response.text().trim()
-  });
-}
-
-
-    // Validate table
-    const allowedTables = [
-      "records",
-      "estimates",
-      "daily_progress",
-      "cl_biodata",
-      "pending_users"
-    ];
-
-    if (!allowedTables.includes(plan.table)) {
-      return res.json({ reply: "Invalid table requested." });
-    }
-
-    // Build SELECT
-    const selectCols =
-      plan.columns && plan.columns.includes("*")
-        ? "*"
-        : (plan.columns || ["*"]).join(",");
-
-    let query = supabase
-      .from(plan.table)
-      .select(selectCols);
-
-    // Filters
-    if (plan.filters) {
-      for (const [col, val] of Object.entries(plan.filters)) {
-        query = query.eq(col, val);
-      }
-    }
-
-    const limit = plan.limit && plan.limit <= 20 ? plan.limit : 1;
-    const { data, error } = await query.limit(limit);
-
-    if (error) {
-      console.error(error);
-      return res.json({ reply: "Database query failed." });
-    }
-
-    if (!data || data.length === 0) {
-      return res.json({ reply: "No matching data found." });
-    }
-
-    return res.json({
-      reply: "Here is the requested information.",
-      table: plan.table,
-      columns: plan.columns || ["*"],
-      data
-    });
-
-  } catch (err) {
-    console.error("AI QUERY ERROR:", err);
-    return res.json({ reply: "Service temporarily unavailable." });
-  }
-}); */
 app.get("/dashboard/summary", authenticateToken, async (req, res) => {
   const [prs, ests, daily, cls] = await Promise.all([
     supabase.from("records").select("*", { count: "exact", head: true }),
@@ -1805,6 +1711,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
