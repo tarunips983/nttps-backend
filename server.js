@@ -10,6 +10,7 @@ import nodemailer from "nodemailer";
 import cron from "node-cron";
 import { createClient } from "@supabase/supabase-js";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.js";
+import fetch from "node-fetch";
 
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
@@ -1557,25 +1558,6 @@ function safeEvalMath(expr) {
 }
 
 
-async function webSearch(query) {
-  const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_redirect=1&no_html=1`;
-
-  const res = await fetch(url);
-  const data = await res.json();
-
-  // If DuckDuckGo has abstract text
-  if (data.AbstractText) {
-    return data.AbstractText;
-  }
-
-  // Otherwise try related topics
-  if (data.RelatedTopics && data.RelatedTopics.length > 0) {
-    return data.RelatedTopics[0].Text || "No clear result found.";
-  }
-
-  return "No result found on the internet.";
-}
-
 
 app.post("/ai/query", async (req, res) => {
   try {
@@ -1627,36 +1609,65 @@ app.post("/ai/query", async (req, res) => {
     }
 
     // 🌐 WEB SEARCH
+// ================= WEB SEARCH =================
 if (intent.type === "WEB") {
-  const result = await webSearch(intent.query);
+  const q = encodeURIComponent(intent.query);
+
+  const url = `https://api.duckduckgo.com/?q=${q}&format=json&no_html=1`;
+
+  const r = await fetch(url);
+  const data = await r.json();
+
+  if (data.AbstractText) {
+    return res.json({
+      reply: data.AbstractText
+    });
+  }
+
   return res.json({
-    reply: result
+    reply: "I could not find a clear answer on the internet."
   });
 }
-// 🧮 MATH
+
+// ================= MATH =================
 if (intent.type === "MATH") {
-  const result = safeEvalMath(intent.expression);
-  return res.json({
-    reply: `Result: ${result}`
-  });
+  try {
+    const result = Function("return " + intent.expression)();
+    return res.json({
+      reply: `Result = ${result}`
+    });
+  } catch (e) {
+    return res.json({
+      reply: "Invalid math expression."
+    });
+  }
 }
-// 📅 DATE / TIME
+
+// ================= DATE / TIME =================
 if (intent.type === "DATE") {
   const now = new Date();
+
   if (intent.value === "today") {
-    return res.json({ reply: now.toDateString() });
+    return res.json({ reply: `Today's date is ${now.toDateString()}` });
   }
+
   if (intent.value === "yesterday") {
-    const d = new Date(now);
-    d.setDate(d.getDate() - 1);
-    return res.json({ reply: d.toDateString() });
+    const y = new Date(now.getTime() - 86400000);
+    return res.json({ reply: `Yesterday was ${y.toDateString()}` });
   }
+
   if (intent.value === "tomorrow") {
-    const d = new Date(now);
-    d.setDate(d.getDate() + 1);
-    return res.json({ reply: d.toDateString() });
+    const t = new Date(now.getTime() + 86400000);
+    return res.json({ reply: `Tomorrow is ${t.toDateString()}` });
   }
 }
+
+if (intent.type === "TIME") {
+  return res.json({
+    reply: `Current time is ${new Date().toLocaleTimeString()}`
+  });
+}
+
 
 if (intent.type === "TIME") {
   return res.json({ reply: new Date().toLocaleTimeString() });
@@ -1855,6 +1866,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
