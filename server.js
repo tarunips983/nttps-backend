@@ -1543,7 +1543,38 @@ app.get("/dashboard/summary", authenticateToken, async (req, res) => {
     cl_biodata: cls.count
   });
 });
+function safeEvalMath(expr) {
+  try {
+    // only allow numbers and operators
+    if (!/^[0-9\.\+\-\*\/\(\)%\s]*$/.test(expr)) {
+      return "Invalid math expression.";
+    }
+    const result = Function(`"use strict"; return (${expr})`)();
+    return result;
+  } catch {
+    return "Cannot calculate this.";
+  }
+}
 
+
+async function webSearch(query) {
+  const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_redirect=1&no_html=1`;
+
+  const res = await fetch(url);
+  const data = await res.json();
+
+  // If DuckDuckGo has abstract text
+  if (data.AbstractText) {
+    return data.AbstractText;
+  }
+
+  // Otherwise try related topics
+  if (data.RelatedTopics && data.RelatedTopics.length > 0) {
+    return data.RelatedTopics[0].Text || "No clear result found.";
+  }
+
+  return "No result found on the internet.";
+}
 
 
 app.post("/ai/query", async (req, res) => {
@@ -1552,6 +1583,7 @@ app.post("/ai/query", async (req, res) => {
     if (!question) {
       return res.json({ reply: "Ask something." });
     }
+const intent = await aiRes.json();
 
     // 🔥 CALL PYTHON AI
     const aiRes = await fetch("https://nttps-ai.onrender.com/analyze", {
@@ -1594,6 +1626,47 @@ app.post("/ai/query", async (req, res) => {
         data
       });
     }
+
+    // 🌐 WEB SEARCH
+if (intent.type === "WEB") {
+  const result = await webSearch(intent.query);
+  return res.json({
+    reply: result
+  });
+}
+// 🧮 MATH
+if (intent.type === "MATH") {
+  const result = safeEvalMath(intent.expression);
+  return res.json({
+    reply: `Result: ${result}`
+  });
+}
+// 📅 DATE / TIME
+if (intent.type === "DATE") {
+  const now = new Date();
+  if (intent.value === "today") {
+    return res.json({ reply: now.toDateString() });
+  }
+  if (intent.value === "yesterday") {
+    const d = new Date(now);
+    d.setDate(d.getDate() - 1);
+    return res.json({ reply: d.toDateString() });
+  }
+  if (intent.value === "tomorrow") {
+    const d = new Date(now);
+    d.setDate(d.getDate() + 1);
+    return res.json({ reply: d.toDateString() });
+  }
+}
+
+if (intent.type === "TIME") {
+  return res.json({ reply: new Date().toLocaleTimeString() });
+}
+
+if (intent.type === "DAY") {
+  return res.json({ reply: new Date().toLocaleDateString("en-US", { weekday: "long" }) });
+}
+
 // ================= LIST / FILTER PR =================
 if (intent.type === "PR_LIST") {
   let q = supabase.from("records").select("*").eq("is_deleted", false);
@@ -1717,6 +1790,14 @@ if (intent.type === "SUMMARY") {
         data
       });
     }
+// 🤖 GENERAL AI
+if (intent.type === "GENERAL") {
+  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+  const result = await model.generateContent(intent.prompt);
+  return res.json({
+    reply: result.response.text().trim()
+  });
+}
 
     // CL FULL
     if (intent.type === "CL_FULL") {
@@ -1775,6 +1856,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
