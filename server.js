@@ -1583,7 +1583,6 @@ app.post("/ai/query", async (req, res) => {
     if (!question) {
       return res.json({ reply: "Ask something." });
     }
-const intent = await aiRes.json();
 
     // 🔥 CALL PYTHON AI
     const aiRes = await fetch("https://nttps-ai.onrender.com/analyze", {
@@ -1856,6 +1855,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
