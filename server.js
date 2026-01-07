@@ -1594,6 +1594,70 @@ app.post("/ai/query", async (req, res) => {
         data
       });
     }
+// ================= LIST / FILTER PR =================
+if (intent.type === "PR_LIST") {
+  let q = supabase.from("records").select("*").eq("is_deleted", false);
+
+  const f = intent.filters || {};
+
+  if (f.status) q = q.eq("status", f.status);
+  if (f.division) q = q.eq("division_label", f.division);
+
+  if (f.amount_op && f.amount) {
+    if (f.amount_op === ">") q = q.gt("amount", f.amount);
+    if (f.amount_op === "<") q = q.lt("amount", f.amount);
+  }
+
+  // Date filters
+  if (f.date) {
+    const today = new Date();
+
+    if (f.date === "today") {
+      const d = today.toISOString().slice(0, 10);
+      q = q.eq("pr_date", d);
+    }
+
+    if (f.date === "yesterday") {
+      const y = new Date(today - 86400000).toISOString().slice(0,10);
+      q = q.eq("pr_date", y);
+    }
+
+    if (f.date === "last_week") {
+      const w = new Date(today - 7*86400000).toISOString().slice(0,10);
+      q = q.gte("pr_date", w);
+    }
+  }
+
+  const { data, error } = await q.limit(20);
+  if (error) throw error;
+
+  return res.json({
+    reply: "Here are the matching PRs:",
+    columns: data.length ? Object.keys(data[0]) : [],
+    data
+  });
+}
+// ================= SUMMARY =================
+if (intent.type === "SUMMARY") {
+  let q = supabase.from("records").select("amount", { count: "exact" });
+
+  const f = intent.filters || {};
+
+  if (f.status) q = q.eq("status", f.status);
+  if (f.division) q = q.eq("division_label", f.division);
+
+  const { data, count, error } = await q;
+  if (error) throw error;
+
+  if (intent.target === "count") {
+    return res.json({ reply: `Total records: ${count}` });
+  }
+
+  if (intent.target === "sum") {
+    const total = (data || []).reduce((s, r) => s + (r.amount || 0), 0);
+    return res.json({ reply: `Total amount: ₹ ${total.toLocaleString()}` });
+  }
+}
 
     // PR COLUMN
     if (intent.type === "PR_COLUMN") {
@@ -1711,6 +1775,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
