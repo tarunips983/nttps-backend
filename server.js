@@ -1688,6 +1688,7 @@ app.get("/ai/conversations", authenticateToken, async (req, res) => {
     .from("ai_conversations")
     .select("*")
     .eq("user_id", req.user.id)
+    .eq("is_deleted", false)
     .order("created_at", { ascending: false });
 
   if (error) return res.status(500).json({ error: error.message });
@@ -1703,6 +1704,7 @@ app.get("/ai/conversations/:id/messages", authenticateToken, async (req, res) =>
     .select("id")
     .eq("id", convId)
     .eq("user_id", req.user.id)
+    .eq("is_deleted", false)
     .single();
 
   if (!conv) return res.status(403).json({ error: "Access denied" });
@@ -1717,6 +1719,22 @@ app.get("/ai/conversations/:id/messages", authenticateToken, async (req, res) =>
 
   res.json(data);
 });
+
+app.delete("/ai/conversations/:id", authenticateToken, async (req, res) => {
+  const { id } = req.params;
+
+  const { error } = await supabase
+    .from("ai_conversations")
+    .update({ is_deleted: true })
+    .eq("id", id)
+    .eq("user_id", req.user.id);
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  res.json({ success: true });
+});
+
+
 app.post("/ai/messages", authenticateToken, async (req, res) => {
   const { conversation_id, role, content } = req.body;
 
@@ -2039,6 +2057,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
