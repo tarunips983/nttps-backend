@@ -1539,9 +1539,11 @@ function detectIntent(text) {
   const filters = {};
 
   // ================= GREETING =================
-  if (/(hi|hello|hey|good morning|good evening)/.test(t)) {
-    return { type: "GREETING" };
-  }
+
+if (/^(hi|hello|hey|good morning|good evening)$/.test(t)) {
+  return { type: "GREETING" };
+}
+
 
   // ================= DIVISION MAP =================
   const divMap = {
@@ -1850,8 +1852,9 @@ if (intent.type === "WEB") {
 
   if (data.AbstractText) {
     return res.json({
-      reply: data.AbstractText
-    });
+  mode: "web",
+  reply: data.AbstractText
+});
   }
 
   return res.json({
@@ -1945,6 +1948,7 @@ if (intent.type === "PR_LIST") {
   if (error) throw error;
 
   return res.json({
+    mode: "db",
     reply: "Here are the matching PRs:",
     columns: data.length ? Object.keys(data[0]) : [],
     data
@@ -1982,7 +1986,9 @@ if (intent.type === "SUMMARY") {
 
       if (error) throw error;
       if (!data || !data.length) {
-        return res.json({ reply: "PR not found." });
+        return res.json({ 
+          mode: "db",
+          reply: "PR not found." });
       }
 
       return res.json({
@@ -2002,7 +2008,9 @@ if (intent.type === "SUMMARY") {
 
       if (error) throw error;
       if (!data || !data.length) {
-        return res.json({ reply: "Estimate not found." });
+        return res.json({ 
+          mode: "db",
+          reply: "Estimate not found." });
       }
 
       return res.json({
@@ -2025,6 +2033,7 @@ if (intent.type === "SUMMARY") {
       if (error) throw error;
 
       return res.json({
+        mode: "db",
         reply: "Daily progress records:",
         columns: data.length ? Object.keys(data[0]) : [],
         data
@@ -2035,8 +2044,9 @@ if (intent.type === "GENERAL") {
   const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
   const result = await model.generateContent(intent.prompt);
   return res.json({
-    reply: result.response.text().trim()
-  });
+  mode: "ai",
+  reply: result.response.text().trim()
+});
 }
 
     // CL FULL
@@ -2068,6 +2078,7 @@ if (intent.type === "GENERAL") {
       if (error) throw error;
 
       return res.json({
+        mode: "db",
         reply: "CL bio data list:",
         columns: data.length ? Object.keys(data[0]) : [],
         data
@@ -2096,6 +2107,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
