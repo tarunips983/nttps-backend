@@ -1846,7 +1846,7 @@ app.post("/ai/analyze-file", authenticateToken, uploadInMemory.single("file"), a
       if (!ocrText || ocrText.trim().length < 10) {
         console.log("🌐 Falling back to Gemini Vision API...");
 
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
 
         const base64Image = file.buffer.toString("base64");
 
@@ -1950,7 +1950,7 @@ Always format responses as:
 
 
     
-const { fileText } = req.body;
+const fileText = req.body.fileText || "";
 
 let finalPrompt = `
 ${systemInstruction}
@@ -2166,7 +2166,7 @@ if (intent.type === "SUMMARY") {
     }
 // 🤖 GENERAL AI
 if (intent.type === "GENERAL") {
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
 
   const result = await model.generateContent(finalPrompt);
 
@@ -2237,6 +2237,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
