@@ -1616,7 +1616,7 @@ app.get("/ai/conversations/:id/messages", authenticateToken, async (req, res) =>
 app.post("/ai/messages", authenticateToken, async (req, res) => {
   const { conversation_id, role, content } = req.body;
 
-  const { data, error } = await supabase
+  const { error } = await supabase
     .from("ai_messages")
     .insert({
       conversation_id,
@@ -1937,6 +1937,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
