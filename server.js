@@ -1,4 +1,4 @@
-import "dotenv/config";
+ import "dotenv/config";
 
 import express from "express";
 import cors from "cors";
@@ -1950,11 +1950,13 @@ Always format responses as:
 
 
     
+const { fileText } = req.body;
+
 let finalPrompt = `
 ${systemInstruction}
 
 User Question:
-${userQuery}
+${question}
 
 ${fileText ? "Attached Document Content:\n" + fileText : ""}
 
@@ -2164,13 +2166,16 @@ if (intent.type === "SUMMARY") {
     }
 // 🤖 GENERAL AI
 if (intent.type === "GENERAL") {
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-  const result = await model.generateContent(intent.prompt);
+  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+  const result = await model.generateContent(finalPrompt);
+
   return res.json({
-  mode: "ai",
-  reply: result.response.text().trim()
-});
+    mode: "ai",
+    reply: result.response.text().trim()
+  });
 }
+
 
     // CL FULL
     if (intent.type === "CL_FULL") {
@@ -2232,6 +2237,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
