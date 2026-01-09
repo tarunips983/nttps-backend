@@ -15,6 +15,8 @@ import fetch from "node-fetch";
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
+const app = express();
+
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 app.get("/health", (req, res) => {
@@ -34,7 +36,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE);
 process.env.PDFJS_NO_CMAP = "true";
 process.env.PDFJS_NO_STANDARD_FONTS = "true";
 
-const app = express();
+
 
 // ---------------------------------------------
 // CORS
@@ -1935,6 +1937,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
