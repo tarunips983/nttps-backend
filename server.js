@@ -1561,6 +1561,71 @@ function safeEvalMath(expr) {
   }
 }
 
+app.post("/ai/conversations", authenticateToken, async (req, res) => {
+  const { title } = req.body;
+
+  const { data, error } = await supabase
+    .from("ai_conversations")
+    .insert({
+      user_id: req.user.id,
+      title: title || "New Chat"
+    })
+    .select()
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  res.json(data);
+});
+app.get("/ai/conversations", authenticateToken, async (req, res) => {
+  const { data, error } = await supabase
+    .from("ai_conversations")
+    .select("*")
+    .eq("user_id", req.user.id)
+    .order("created_at", { ascending: false });
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  res.json(data);
+});
+app.get("/ai/conversations/:id/messages", authenticateToken, async (req, res) => {
+  const convId = req.params.id;
+
+  // Security: verify ownership
+  const { data: conv } = await supabase
+    .from("ai_conversations")
+    .select("id")
+    .eq("id", convId)
+    .eq("user_id", req.user.id)
+    .single();
+
+  if (!conv) return res.status(403).json({ error: "Access denied" });
+
+  const { data, error } = await supabase
+    .from("ai_messages")
+    .select("*")
+    .eq("conversation_id", convId)
+    .order("created_at");
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  res.json(data);
+});
+app.post("/ai/messages", authenticateToken, async (req, res) => {
+  const { conversation_id, role, content } = req.body;
+
+  const { data, error } = await supabase
+    .from("ai_messages")
+    .insert({
+      conversation_id,
+      role,
+      content
+    });
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  res.json({ success: true });
+});
 
 
 app.post("/ai/query", async (req, res) => {
@@ -1870,6 +1935,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
