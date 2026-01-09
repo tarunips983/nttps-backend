@@ -1695,6 +1695,20 @@ app.get("/ai/conversations", authenticateToken, async (req, res) => {
 
   res.json(data);
 });
+app.put("/ai/conversations/:id", authenticateToken, async (req, res) => {
+  const { title } = req.body;
+
+  const { error } = await supabase
+    .from("ai_conversations")
+    .update({ title })
+    .eq("id", req.params.id)
+    .eq("user_id", req.user.id);
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ success: true });
+});
+
+
 app.get("/ai/conversations/:id/messages", authenticateToken, async (req, res) => {
   const convId = req.params.id;
 
@@ -1736,12 +1750,12 @@ app.delete("/ai/conversations/:id", authenticateToken, async (req, res) => {
 
 
 app.post("/ai/messages", authenticateToken, async (req, res) => {
-  const { conversation_id, role, content } = req.body;
+  const { conversation_id, role, content, file_url } = req.body;
 
   // Insert message
   const { error } = await supabase
     .from("ai_messages")
-    .insert({ conversation_id, role, content });
+    .insert({ conversation_id, role, content, file_url: file_url || null });
 
   if (error) return res.status(500).json({ error: error.message });
 
@@ -1750,15 +1764,40 @@ app.post("/ai/messages", authenticateToken, async (req, res) => {
     const shortTitle = content.substring(0, 40);
 
     await supabase
-      .from("ai_conversations")
-      .update({ title: shortTitle })
-      .eq("id", conversation_id)
-      .eq("title", "New Chat");
+  .from("ai_conversations")
+  .update({ title: content.slice(0, 40) })
+  .eq("id", conversation_id)
+  .is("title", "New Chat");
   }
 
   res.json({ success: true });
 });
 
+app.post("/ai/upload-chat-file", authenticateToken, uploadInMemory.single("file"), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: "No file" });
+
+    const ext = path.extname(req.file.originalname);
+    const fileName = `chat_${Date.now()}_${Math.random().toString(36).slice(2)}${ext}`;
+
+    const { data, error } = await supabase.storage
+      .from("file-transfer")   // reuse your existing bucket
+      .upload(fileName, req.file.buffer, {
+        contentType: req.file.mimetype
+      });
+
+    if (error) throw error;
+
+    const url = supabase.storage
+      .from("file-transfer")
+      .getPublicUrl(data.path).data.publicUrl;
+
+    res.json({ url });
+  } catch (err) {
+    console.error("Chat file upload error:", err);
+    res.status(500).json({ error: "Upload failed" });
+  }
+});
 
 app.post("/ai/query", authenticateToken, async (req, res) => {
   try {
@@ -2057,6 +2096,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
