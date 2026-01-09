@@ -1720,15 +1720,23 @@ app.get("/ai/conversations/:id/messages", authenticateToken, async (req, res) =>
 app.post("/ai/messages", authenticateToken, async (req, res) => {
   const { conversation_id, role, content } = req.body;
 
+  // Insert message
   const { error } = await supabase
     .from("ai_messages")
-    .insert({
-      conversation_id,
-      role,
-      content
-    });
+    .insert({ conversation_id, role, content });
 
   if (error) return res.status(500).json({ error: error.message });
+
+  // ✅ If this is the FIRST USER MESSAGE, update title
+  if (role === "user") {
+    const shortTitle = content.substring(0, 40);
+
+    await supabase
+      .from("ai_conversations")
+      .update({ title: shortTitle })
+      .eq("id", conversation_id)
+      .eq("title", "New Chat");
+  }
 
   res.json({ success: true });
 });
@@ -2031,6 +2039,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
