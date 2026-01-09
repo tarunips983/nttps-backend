@@ -1834,6 +1834,7 @@ const intent = detectIntent(question);
       }
 
       return res.json({
+        mode: "db",
         reply: `Details for PR ${intent.prNo}`,
         columns: Object.keys(data[0]),
         data
@@ -1866,9 +1867,7 @@ if (intent.type === "WEB") {
 if (intent.type === "MATH") {
   try {
     const result = Function("return " + intent.expression)();
-    return res.json({
-      reply: `Result = ${result}`
-    });
+    return res.json({ mode: "ai", reply: `Result = ${result}` });
   } catch (e) {
     return res.json({
       reply: "Invalid math expression."
@@ -1967,12 +1966,12 @@ if (intent.type === "SUMMARY") {
   if (error) throw error;
 
   if (intent.target === "count") {
-    return res.json({ reply: `Total records: ${count}` });
+    return res.json({ mode: "db", reply: `Total records: ${count}` });
   }
 
   if (intent.target === "sum") {
     const total = (data || []).reduce((s, r) => s + (r.amount || 0), 0);
-    return res.json({ reply: `Total amount: ₹ ${total.toLocaleString()}` });
+    return res.json({ mode: "db", reply: `Total amount: ₹ ${total.toLocaleString()}` });
   }
 }
 
@@ -1992,6 +1991,7 @@ if (intent.type === "SUMMARY") {
       }
 
       return res.json({
+        mode: "db",
         reply: `${intent.column.replace("_", " ")}: ${data[0][intent.column]}`
       });
     }
@@ -2014,6 +2014,7 @@ if (intent.type === "SUMMARY") {
       }
 
       return res.json({
+        mode: "db",
         reply: `Estimate ${intent.estimateNo}`,
         columns: Object.keys(data[0]),
         data
@@ -2063,6 +2064,7 @@ if (intent.type === "GENERAL") {
       }
 
       return res.json({
+        mode: "db",
         reply: "CL bio data:",
         columns: Object.keys(data[0]),
         data
@@ -2087,6 +2089,7 @@ if (intent.type === "GENERAL") {
 
     // FALLBACK
     return res.json({
+      mode: "ai",
       reply: "I can help with PRs, Estimates, Daily progress, and CL data."
     });
 
@@ -2107,6 +2110,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
