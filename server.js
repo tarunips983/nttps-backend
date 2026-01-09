@@ -1898,6 +1898,8 @@ app.post("/ai/analyze-file", authenticateToken, uploadInMemory.single("file"), a
 app.post("/ai/query", authenticateToken, async (req, res) => {
   try {
     const question = (req.body.query || "").trim();
+const fileText = (req.body.fileText || "").trim();
+
     if (!question) {
       return res.json({ reply: "Ask something." });
     }
@@ -1950,8 +1952,6 @@ Always format responses as:
 
 
     
-const fileText = req.body.fileText || "";
-
 let finalPrompt = `
 ${systemInstruction}
 
@@ -1960,8 +1960,14 @@ ${question}
 
 ${fileText ? "Attached Document Content:\n" + fileText : ""}
 
-Respond in a well-formatted structured way.
+Instructions:
+- If the user asks to extract or explain the document, use the attached content.
+- If the user asks to write a letter, summary, or explanation, use the document content.
+- If no document is attached, answer normally.
+
+Respond in a clean structured way.
 `;
+
 
 
     
@@ -2237,6 +2243,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
