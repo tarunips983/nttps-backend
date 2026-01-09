@@ -11,6 +11,8 @@ import cron from "node-cron";
 import { createClient } from "@supabase/supabase-js";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.js";
 import fetch from "node-fetch";
+import Tesseract from "tesseract.js";
+
 
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
@@ -1801,6 +1803,98 @@ app.post("/ai/upload-chat-file", authenticateToken, uploadInMemory.single("file"
   }
 });
 
+
+app.post("/ai/analyze-file", authenticateToken, uploadInMemory.single("file"), async (req, res) => {
+  try {
+    const file = req.file;
+    if (!file) return res.status(400).json({ error: "No file" });
+
+    // -----------------------------
+    // PDF → extract text (already working)
+    // -----------------------------
+    if (file.mimetype === "application/pdf") {
+      const pdf = await pdfjsLib.getDocument({ data: file.buffer }).promise;
+      let text = "";
+
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        text += content.items.map(i => i.str).join(" ") + "\n";
+      }
+
+      return res.json({ type: "pdf", text });
+    }
+
+    // -----------------------------
+    // IMAGE → Try Tesseract OCR first
+    // -----------------------------
+    if (file.mimetype.startsWith("image/")) {
+      console.log("🧠 Trying Tesseract OCR...");
+
+      let ocrText = "";
+
+      try {
+        const result = await Tesseract.recognize(file.buffer, "eng");
+        ocrText = result.data.text || "";
+      } catch (err) {
+        console.warn("⚠️ Tesseract failed:", err);
+      }
+
+      // -----------------------------
+      // If OCR FAILED or EMPTY → Use Gemini Vision
+      // -----------------------------
+      if (!ocrText || ocrText.trim().length < 10) {
+        console.log("🌐 Falling back to Gemini Vision API...");
+
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+        const base64Image = file.buffer.toString("base64");
+
+        const result = await model.generateContent([
+          {
+            inlineData: {
+              mimeType: file.mimetype,
+              data: base64Image
+            }
+          },
+          { text: "Read and extract all text from this image. If it is a document, preserve structure." }
+        ]);
+
+        const response = await result.response;
+        const visionText = response.text();
+
+        return res.json({
+          type: "image",
+          text: visionText,
+          source: "gemini-vision"
+        });
+      }
+
+      // -----------------------------
+      // OCR SUCCESS
+      // -----------------------------
+      return res.json({
+        type: "image",
+        text: ocrText,
+        source: "tesseract"
+      });
+    }
+
+    // -----------------------------
+    // Unsupported
+    // -----------------------------
+    res.json({ type: "unknown", text: "" });
+
+  } catch (e) {
+    console.error("❌ analyze-file error:", e);
+    res.status(500).json({ error: "Analysis failed" });
+  }
+});
+
+
+
+
+
 app.post("/ai/query", authenticateToken, async (req, res) => {
   try {
     const question = (req.body.query || "").trim();
@@ -1841,6 +1935,34 @@ const intent = detectIntent(question);
       });
     }
 
+
+const systemInstruction = `
+You are an office assistant.
+
+Always format responses as:
+- Clear paragraphs
+- Use bullet points or numbered lists where appropriate
+- Leave blank line between sections
+- Use headings when content is long
+- For letters: use proper letter format
+- For explanations: use points and sections
+`;
+
+
+    
+let finalPrompt = `
+${systemInstruction}
+
+User Question:
+${userQuery}
+
+${fileText ? "Attached Document Content:\n" + fileText : ""}
+
+Respond in a well-formatted structured way.
+`;
+
+
+    
     // 🌐 WEB SEARCH
 // ================= WEB SEARCH =================
 if (intent.type === "WEB") {
@@ -2110,6 +2232,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
