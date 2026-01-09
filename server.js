@@ -1534,6 +1534,110 @@ User question:
 `;
 }
 
+function detectIntent(text) {
+  const t = text.toLowerCase().trim();
+  const filters = {};
+
+  // ================= GREETING =================
+  if (/(hi|hello|hey|good morning|good evening)/.test(t)) {
+    return { type: "GREETING" };
+  }
+
+  // ================= DIVISION MAP =================
+  const divMap = {
+    "tm": "TM & CAM",
+    "tm&cam": "TM & CAM",
+    "bm": "BM & AHP",
+    "ahp": "BM & AHP",
+    "em": "EM",
+    "c&i": "C&I"
+  };
+
+  for (const k in divMap) {
+    if (t.includes(k)) {
+      filters.division = divMap[k];
+    }
+  }
+
+  // ================= STATUS =================
+  if (t.includes("pending")) filters.status = "Pending";
+  if (t.includes("completed") || t.includes("closed")) filters.status = "Completed";
+
+  // ================= AMOUNT =================
+  let m = t.match(/(above|over|greater than)\s+(\d+)/);
+  if (m) {
+    filters.amount_op = ">";
+    filters.amount = parseInt(m[2]) * 100000;
+  }
+
+  m = t.match(/(below|less than)\s+(\d+)/);
+  if (m) {
+    filters.amount_op = "<";
+    filters.amount = parseInt(m[2]) * 100000;
+  }
+
+  // ================= DATE =================
+  if (t.includes("today")) filters.date = "today";
+  if (t.includes("yesterday")) filters.date = "yesterday";
+  if (t.includes("last week")) filters.date = "last_week";
+  if (t.includes("last month")) filters.date = "last_month";
+
+  // ================= SUMMARY =================
+  if (t.includes("how many") || t.includes("count")) {
+    return { type: "SUMMARY", target: "count", filters };
+  }
+
+  if (t.includes("total amount") || t.includes("sum")) {
+    return { type: "SUMMARY", target: "sum", filters };
+  }
+
+  // ================= PR =================
+  const prMatch = t.match(/\b10\d{8}\b/);
+  if (prMatch) {
+    const prNo = prMatch[0];
+
+    if (t.includes("date")) return { type: "PR_COLUMN", column: "pr_date", prNo };
+    if (t.includes("status")) return { type: "PR_COLUMN", column: "status", prNo };
+    if (t.includes("amount")) return { type: "PR_COLUMN", column: "amount", prNo };
+
+    return { type: "PR_FULL", prNo };
+  }
+
+  // ================= ESTIMATE =================
+  const estMatch = t.match(/\b(13|21)\d{8}\b/);
+  if (estMatch) {
+    return { type: "ESTIMATE_FULL", estimateNo: estMatch[0] };
+  }
+
+  // ================= CL =================
+  const aadMatch = t.match(/\b\d{12}\b/);
+  if (aadMatch) {
+    return { type: "CL_FULL", aadhar: aadMatch[0] };
+  }
+
+  if (t.includes("cl")) {
+    return { type: "CL_LIST", filters };
+  }
+
+  // ================= DAILY =================
+  if (t.includes("daily")) {
+    return { type: "DAILY_LIST", filters };
+  }
+
+  // ================= WEB =================
+  if (/(who is|capital|minister|pm|cm|price|weather)/.test(t)) {
+    return { type: "WEB", query: t };
+  }
+
+  // ================= MATH =================
+  if (/^[0-9\.\+\-\*\/\(\)%\s]+$/.test(t)) {
+    return { type: "MATH", expression: t };
+  }
+
+  // ================= DEFAULT =================
+  return { type: "GENERAL", prompt: t };
+}
+
 
 app.get("/dashboard/summary", authenticateToken, async (req, res) => {
   const [prs, ests, daily, cls] = await Promise.all([
@@ -1630,25 +1734,15 @@ app.post("/ai/messages", authenticateToken, async (req, res) => {
 });
 
 
-app.post("/ai/query", async (req, res) => {
+app.post("/ai/query", authenticateToken, async (req, res) => {
   try {
     const question = (req.body.query || "").trim();
     if (!question) {
       return res.json({ reply: "Ask something." });
     }
 
-    // 🔥 CALL PYTHON AI
-    const aiRes = await fetch("https://nttps-ai.onrender.com/analyze", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: question })
-    });
-
-    if (!aiRes.ok) {
-      throw new Error("Python AI server not responding");
-    }
-
-    const intent = await aiRes.json();
+ // 🧠 LOCAL NODE INTENT DETECTION (NO PYTHON)
+const intent = detectIntent(question);
 
     console.log("AI INTENT:", intent); // <-- keep this for debugging
 
@@ -1937,6 +2031,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
