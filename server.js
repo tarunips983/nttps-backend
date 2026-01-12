@@ -1805,6 +1805,7 @@ app.post("/ai/upload-chat-file", authenticateToken, uploadInMemory.single("file"
 
 
 app.post("/ai/analyze-file", authenticateToken, uploadInMemory.single("file"), async (req, res) => {
+ console.log("📥 Received file:", req.file?.originalname, req.file?.mimetype);
   try {
     const file = req.file;
     if (!file) return res.status(400).json({ error: "No file" });
@@ -2255,6 +2256,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
