@@ -1771,7 +1771,7 @@ app.post("/ai/analyze-file", authenticateToken, uploadInMemory.single("file"), a
   try {
     console.log("📄 Parsing PDF, size =", file.size);
 
-   cconst data = await pdfParse(file.buffer);
+   const data = await pdfParse(file.buffer);
 
     console.log("✅ PDF parsed, text length =", data.text?.length);
 
@@ -2216,6 +2216,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
