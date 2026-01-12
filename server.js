@@ -9,7 +9,8 @@ import jwt from "jsonwebtoken";
 import nodemailer from "nodemailer";
 import cron from "node-cron";
 import { createClient } from "@supabase/supabase-js";
-import pdfParse from "pdf-parse/lib/pdf-parse.js";
+import pdfParsePkg from "pdf-parse";
+const pdfParse = pdfParsePkg.default || pdfParsePkg;
 import Tesseract from "tesseract.js";
 
 
@@ -2216,6 +2217,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
