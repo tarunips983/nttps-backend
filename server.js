@@ -1809,10 +1809,13 @@ app.post("/ai/analyze-file", authenticateToken, uploadInMemory.single("file"), a
     const file = req.file;
     if (!file) return res.status(400).json({ error: "No file" });
 
-    // -----------------------------
-    // PDF → extract text (already working)
-    // -----------------------------
-    if (file.mimetype === "application/pdf") {
+    const mime = file.mimetype || "";
+    const name = file.originalname || "";
+
+    // =========================
+    // PDF
+    // =========================
+    if (mime === "application/pdf") {
       const pdf = await pdfjsLib.getDocument({ data: file.buffer }).promise;
       let text = "";
 
@@ -1825,54 +1828,34 @@ app.post("/ai/analyze-file", authenticateToken, uploadInMemory.single("file"), a
       return res.json({ type: "pdf", text });
     }
 
-    // -----------------------------
-    // IMAGE → Try Tesseract OCR first
-    // -----------------------------
-    if (file.mimetype.startsWith("image/")) {
-      console.log("🧠 Trying Tesseract OCR...");
-
+    // =========================
+    // IMAGE
+    // =========================
+    if (mime.startsWith("image/")) {
       let ocrText = "";
 
       try {
         const result = await Tesseract.recognize(file.buffer, "eng");
         ocrText = result.data.text || "";
-      } catch (err) {
-        console.warn("⚠️ Tesseract failed:", err);
-      }
+      } catch {}
 
-      // -----------------------------
-      // If OCR FAILED or EMPTY → Use Gemini Vision
-      // -----------------------------
       if (!ocrText || ocrText.trim().length < 10) {
-        console.log("🌐 Falling back to Gemini Vision API...");
-
         const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
         const base64Image = file.buffer.toString("base64");
 
         const result = await model.generateContent([
-          {
-            inlineData: {
-              mimeType: file.mimetype,
-              data: base64Image
-            }
-          },
-          { text: "Read and extract all text from this image. If it is a document, preserve structure." }
+          { inlineData: { mimeType: mime, data: base64Image } },
+          { text: "Extract all readable text" }
         ]);
-
-        const response = await result.response;
-        const visionText = response.text();
 
         return res.json({
           type: "image",
-          text: visionText,
-          source: "gemini-vision"
+          text: result.response.text(),
+          source: "gemini"
         });
       }
 
-      // -----------------------------
-      // OCR SUCCESS
-      // -----------------------------
       return res.json({
         type: "image",
         text: ocrText,
@@ -1880,10 +1863,39 @@ app.post("/ai/analyze-file", authenticateToken, uploadInMemory.single("file"), a
       });
     }
 
-    // -----------------------------
-    // Unsupported
-    // -----------------------------
-    res.json({ type: "unknown", text: "" });
+    // =========================
+    // TEXT / CODE FILES
+    // =========================
+    const ext = name.toLowerCase();
+
+    if (
+      ext.endsWith(".js") ||
+      ext.endsWith(".html") ||
+      ext.endsWith(".css") ||
+      ext.endsWith(".json") ||
+      ext.endsWith(".txt") ||
+      ext.endsWith(".md") ||
+      ext.endsWith(".xml") ||
+      ext.endsWith(".py") ||
+      ext.endsWith(".java") ||
+      ext.endsWith(".c") ||
+      ext.endsWith(".cpp")
+    ) {
+      const text = file.buffer.toString("utf-8");
+
+      return res.json({
+        type: "code",
+        text
+      });
+    }
+
+    // =========================
+    // UNKNOWN FILE
+    // =========================
+    return res.json({
+      type: "unknown",
+      text: ""
+    });
 
   } catch (e) {
     console.error("❌ analyze-file error:", e);
@@ -2243,6 +2255,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
