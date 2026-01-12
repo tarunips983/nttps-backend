@@ -10,7 +10,6 @@ import nodemailer from "nodemailer";
 import cron from "node-cron";
 import { createClient } from "@supabase/supabase-js";
 import pdfParse from "pdf-parse";
-import fetch from "node-fetch";
 import Tesseract from "tesseract.js";
 
 
@@ -1817,16 +1816,26 @@ app.post("/ai/analyze-file", authenticateToken, uploadInMemory.single("file"), a
     // =========================
     if (mime === "application/pdf") {
   try {
-    const data = await pdfParse(file.buffer);
+    console.log("📄 Parsing PDF, size =", file.size);
+
+    const data = await pdfParse(file.buffer, { max: 50 });
+
+    console.log("✅ PDF parsed, text length =", data.text?.length);
+
     return res.json({
       type: "pdf",
       text: data.text || ""
     });
+
   } catch (e) {
     console.error("❌ PDF parse failed:", e);
-    return res.status(500).json({ error: "PDF parse failed" });
+    return res.status(500).json({
+      error: "PDF parse failed",
+      details: e.message
+    });
   }
 }
+
     // =========================
     // IMAGE
     // =========================
@@ -2254,6 +2263,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
