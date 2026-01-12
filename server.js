@@ -9,7 +9,7 @@ import jwt from "jsonwebtoken";
 import nodemailer from "nodemailer";
 import cron from "node-cron";
 import { createClient } from "@supabase/supabase-js";
-import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.js";
+import pdfParse from "pdf-parse";
 import fetch from "node-fetch";
 import Tesseract from "tesseract.js";
 
@@ -1803,7 +1803,6 @@ app.post("/ai/upload-chat-file", authenticateToken, uploadInMemory.single("file"
   }
 });
 
-
 app.post("/ai/analyze-file", authenticateToken, uploadInMemory.single("file"), async (req, res) => {
  console.log("📥 Received file:", req.file?.originalname, req.file?.mimetype);
   try {
@@ -1817,18 +1816,17 @@ app.post("/ai/analyze-file", authenticateToken, uploadInMemory.single("file"), a
     // PDF
     // =========================
     if (mime === "application/pdf") {
-      const pdf = await pdfjsLib.getDocument({ data: file.buffer }).promise;
-      let text = "";
-
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const content = await page.getTextContent();
-        text += content.items.map(i => i.str).join(" ") + "\n";
-      }
-
-      return res.json({ type: "pdf", text });
-    }
-
+  try {
+    const data = await pdfParse(file.buffer);
+    return res.json({
+      type: "pdf",
+      text: data.text || ""
+    });
+  } catch (e) {
+    console.error("❌ PDF parse failed:", e);
+    return res.status(500).json({ error: "PDF parse failed" });
+  }
+}
     // =========================
     // IMAGE
     // =========================
@@ -2256,6 +2254,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
