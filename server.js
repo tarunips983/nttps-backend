@@ -9,8 +9,6 @@ import jwt from "jsonwebtoken";
 import nodemailer from "nodemailer";
 import cron from "node-cron";
 import { createClient } from "@supabase/supabase-js";
-import pdfParsePkg from "pdf-parse";
-const pdfParse = pdfParsePkg.default || pdfParsePkg;
 import Tesseract from "tesseract.js";
 
 
@@ -1756,6 +1754,8 @@ app.post("/ai/upload-chat-file", authenticateToken, uploadInMemory.single("file"
   }
 });
 
+import pdf from "pdf-parse";
+
 app.post("/ai/analyze-file", authenticateToken, uploadInMemory.single("file"), async (req, res) => {
  console.log("📥 Received file:", req.file?.originalname, req.file?.mimetype);
   try {
@@ -1772,7 +1772,7 @@ app.post("/ai/analyze-file", authenticateToken, uploadInMemory.single("file"), a
   try {
     console.log("📄 Parsing PDF, size =", file.size);
 
-   const data = await pdfParse(file.buffer);
+  const data = await pdf(file.buffer);
 
     console.log("✅ PDF parsed, text length =", data.text?.length);
 
@@ -2217,6 +2217,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
