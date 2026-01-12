@@ -9,7 +9,7 @@ import jwt from "jsonwebtoken";
 import nodemailer from "nodemailer";
 import cron from "node-cron";
 import { createClient } from "@supabase/supabase-js";
-import * as pdfParse from "pdf-parse";
+import pdfParse from "pdf-parse/lib/pdf-parse.js";
 import Tesseract from "tesseract.js";
 
 
@@ -475,53 +475,6 @@ app.delete("/records/trash/:id", authenticateToken, async (req, res) => {
   }
 });
 
-// =================================================================
-// PDF TEXT EXTRACTION (unchanged, still uses pdfjs-dist)
-// =================================================================
-
-app.post(
-  "/extract-pdf",
-  authenticateToken,
-  uploadInMemory.single("pdfFile"),
-  async (req, res) => {
-    if (!req.file) return res.status(400).json({ error: "No PDF uploaded" });
-
-    try {
-      const loadingTask = pdfjsLib.getDocument({ data: req.file.buffer });
-      const pdf = await loadingTask.promise;
-
-      let extractedText = "";
-
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const content = await page.getTextContent();
-        extractedText += content.items.map((i) => i.str).join(" ") + "\n";
-      }
-
-      const text = extractedText.replace(/\s+/g, " ").trim();
-
-      const prNoMatch = text.match(/PR\s*No\.?\s*[:\-]?\s*(\d+)/i);
-      const amountMatch = text.match(/Estimated\s*Value\s*[:\-]?\s*([0-9,]+)/i);
-      const divisionMatch = text.match(/Division\s*:? ?([A-Za-z0-9\-]+)/i);
-      const briefMatch = text.match(/Brief Description[:\-]?\s*(.+?)(?= Estimate| PR|$)/i);
-
-      res.json({
-        prNo: prNoMatch ? prNoMatch[1] : "",
-        workName: briefMatch ? briefMatch[1] : "",
-        amount: amountMatch ? amountMatch[1].replace(/,/g, "") : "",
-        subDivision: divisionMatch ? divisionMatch[1] : "",
-        recordType: "PR",
-      });
-    } catch (err) {
-      console.error("PDF extract error:", err);
-      res.status(500).json({ error: "Failed to extract PDF" });
-    }
-  }
-);
-
-/* ============================================================
-      ESTIMATES API — ADD / LIST / EDIT / TRASH
-============================================================ */
 
 /* -------------------------------------------
    CREATE NEW ESTIMATE
@@ -1818,7 +1771,7 @@ app.post("/ai/analyze-file", authenticateToken, uploadInMemory.single("file"), a
   try {
     console.log("📄 Parsing PDF, size =", file.size);
 
-   const data = await pdfParse.default(file.buffer, { max: 50 });
+   cconst data = await pdfParse(file.buffer);
 
     console.log("✅ PDF parsed, text length =", data.text?.length);
 
@@ -2263,6 +2216,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
