@@ -1629,13 +1629,14 @@ app.post("/ai/conversations", authenticateToken, async (req, res) => {
   const { title } = req.body;
 
   const { data, error } = await supabase
-    .from("ai_conversations")
-    .insert({
-      user_id: req.user.id,
-      title: title || "New Chat"
-    })
-    .select()
-    .single();
+  .from("ai_conversations")
+  .insert({
+    user_id: req.user.id,
+    title: "New Chat",
+    last_message_at: new Date().toISOString()
+  })
+  .select()
+  .single();
 
   if (error) return res.status(500).json({ error: error.message });
 
@@ -1647,7 +1648,7 @@ app.get("/ai/conversations", authenticateToken, async (req, res) => {
     .select("*")
     .eq("user_id", req.user.id)
     .eq("is_deleted", false)
-    .order("created_at", { ascending: false });
+    .order("last_message_at", { ascending: false })
 
   if (error) return res.status(500).json({ error: error.message });
 
@@ -1706,28 +1707,53 @@ app.delete("/ai/conversations/:id", authenticateToken, async (req, res) => {
   res.json({ success: true });
 });
 
+function generateTitle(text) {
+  if (!text) return "New Chat";
+
+  return text
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 60);
+}
 
 app.post("/ai/messages", authenticateToken, async (req, res) => {
   const { conversation_id, role, content, file_url } = req.body;
 
-  // Insert message
+  // 1️⃣ Insert message
   const { error } = await supabase
     .from("ai_messages")
     .insert({ conversation_id, role, content, file_url: file_url || null });
 
   if (error) return res.status(500).json({ error: error.message });
 
-  // ✅ If this is the FIRST USER MESSAGE, update title
-  if (role === "user") {
-    const shortTitle = content.substring(0, 40);
+  // 2️⃣ Count messages in this conversation
+  const { count } = await supabase
+    .from("ai_messages")
+    .select("*", { count: "exact", head: true })
+    .eq("conversation_id", conversation_id);
+
+  // 3️⃣ If this is FIRST USER MESSAGE → auto rename
+  if (count === 1 && role === "user") {
+    const newTitle = generateTitle(content);
 
     await supabase
-  .from("ai_conversations")
-  .update({ title: content.slice(0, 40) })
-  .eq("id", conversation_id)
-  .is("title", "New Chat");
+      .from("ai_conversations")
+      .update({
+        title: newTitle,
+        last_message_at: new Date().toISOString()
+      })
+      .eq("id", conversation_id);
+  } else {
+    // 4️⃣ Otherwise just update last activity time
+    await supabase
+      .from("ai_conversations")
+      .update({
+        last_message_at: new Date().toISOString()
+      })
+      .eq("id", conversation_id);
   }
 
+  // 5️⃣ Respond to frontend
   res.json({ success: true });
 });
 
