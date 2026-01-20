@@ -1893,11 +1893,59 @@ app.post("/ai/analyze-file", authenticateToken, uploadInMemory.single("file"), a
   }
 });
 
+// =======================================================
+// 🔁 INTERNAL AI RUNNER (used by both /ai/query and stream)
+// =======================================================
+async function runAIQueryInternal(question, fileText, req) {
+  return new Promise((resolve, reject) => {
+    const fakeReq = {
+      body: { query: question, fileText },
+      user: req.user
+    };
+
+    const fakeRes = {
+      json(payload) {
+        resolve(payload.reply || "");
+      },
+      status() {
+        return this;
+      }
+    };
+
+    aiQueryHandler(fakeReq, fakeRes).catch(reject);
+  });
+}
 
 
+app.post("/ai/query-stream", authenticateToken, async (req, res) => {
+  try {
+    const { query, fileText } = req.body;
+
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.setHeader("Transfer-Encoding", "chunked");
+    res.setHeader("Cache-Control", "no-cache");
+    res.flushHeaders();
+
+    const fullReply = await runAIQueryInternal(query, fileText, req);
+
+    const words = String(fullReply).split(" ");
+
+    for (const w of words) {
+      res.write(w + " ");
+      await new Promise(r => setTimeout(r, 25));
+    }
+
+    res.end();
+
+  } catch (err) {
+    console.error("Stream error:", err);
+    res.status(500).end("ERROR");
+  }
+});
 
 
-app.post("/ai/query", authenticateToken, async (req, res) => {
+async function aiQueryHandler(req, res) {
+
   try {
     const question = (req.body.query || "").trim();
 const fileText = (req.body.fileText || "").trim();
@@ -2236,7 +2284,9 @@ if (intent.type === "GENERAL") {
       error: err.message
     });
   }
-});
+}
+
+app.post("/ai/query", authenticateToken, aiQueryHandler);
 
 
 
@@ -2245,6 +2295,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
