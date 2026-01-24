@@ -1752,6 +1752,35 @@ app.post("/ai/messages", authenticateToken, async (req, res) => {
       })
       .eq("id", conversation_id);
   }
+if (count > 12) {
+  // load last 20 messages
+  const { data: msgs } = await supabase
+    .from("ai_messages")
+    .select("role, content")
+    .eq("conversation_id", conversation_id)
+    .order("created_at", { ascending: true })
+    .limit(20);
+
+  if (msgs && msgs.length) {
+    const summaryText = msgs.map(m => `${m.role}: ${m.content}`).join("\n");
+
+    // Ask Gemini to summarize
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const result = await model.generateContent(`
+Summarize this conversation into a compact memory:
+
+${summaryText}
+`);
+
+    const summary = result.response.text().slice(0, 1500);
+
+    // Save summary
+    await supabase
+      .from("ai_conversations")
+      .update({ summary })
+      .eq("id", conversation_id);
+  }
+}
 
   // 5️⃣ Respond to frontend
   res.json({ success: true });
@@ -1948,6 +1977,17 @@ app.post("/ai/query-stream", authenticateToken, async (req, res) => {
 
 
 async function aiQueryHandler(req, res) {
+let summary = "";
+
+if (req.body.conversation_id) {
+  const { data: conv } = await supabase
+    .from("ai_conversations")
+    .select("summary")
+    .eq("id", req.body.conversation_id)
+    .single();
+
+  if (conv?.summary) summary = conv.summary;
+}
 
   try {
     const question = (req.body.query || "").trim();
@@ -2126,26 +2166,26 @@ if (memory.length) {
 let finalPrompt = `
 ${systemInstruction}
 
-Conversation so far:
-${memoryText || "(no previous conversation)"}
+Conversation summary:
+${summary || "(none)"}
 
-Current User Question:
+Recent conversation:
+${memoryText || "(none)"}
+
+Current user question:
 ${question}
 
 ${fileText ? "Attached Document Content:\n" + fileText : ""}
 
-Instructions:
-- Use the conversation history to understand context.
-- If the user refers to something previously mentioned, use it.
-- Do NOT repeat old answers unless needed.
-- Continue the conversation naturally.
+Rules:
+- Use summary + recent messages as memory
+- Resolve "it", "that", "previous one", etc using context
+- Do not ask what user means if it is obvious
 
-Respond in a clean structured way.
+Respond professionally.
 `;
 
-
-
-    
+  
     // 🌐 WEB SEARCH
 // ================= WEB SEARCH =================
 if (intent.type === "WEB") {
@@ -2420,6 +2460,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
