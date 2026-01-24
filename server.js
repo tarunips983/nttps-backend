@@ -1928,9 +1928,14 @@ app.post("/ai/analyze-file", authenticateToken, uploadInMemory.single("file"), a
 async function runAIQueryInternal(question, fileText, req) {
   return new Promise((resolve, reject) => {
     const fakeReq = {
-      body: { query: question, fileText },
-      user: req.user
-    };
+  body: { 
+    query: question, 
+    fileText, 
+    memory: req.body.memory,
+    conversation_id: req.body.conversation_id   // ✅ CRITICAL
+  },
+  user: req.user
+};
 
     const fakeRes = {
       json(payload) {
@@ -1948,7 +1953,7 @@ async function runAIQueryInternal(question, fileText, req) {
 
 app.post("/ai/query-stream", authenticateToken, async (req, res) => {
   try {
-    const { query, fileText, memory } = req.body;
+    const { query, fileText, memory, conversation_id } = req.body;
 
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
     res.setHeader("Transfer-Encoding", "chunked");
@@ -1957,7 +1962,7 @@ app.post("/ai/query-stream", authenticateToken, async (req, res) => {
 
     const fullReply = await runAIQueryInternal(query, fileText, { 
   ...req, 
-  body: { query, fileText, memory } 
+  body: { query, fileText, memory, conversation_id }
 });
 
     const words = String(fullReply).split(" ");
@@ -2460,6 +2465,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
