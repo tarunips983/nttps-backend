@@ -1919,14 +1919,17 @@ async function runAIQueryInternal(question, fileText, req) {
 
 app.post("/ai/query-stream", authenticateToken, async (req, res) => {
   try {
-    const { query, fileText } = req.body;
+    const { query, fileText, memory } = req.body;
 
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
     res.setHeader("Transfer-Encoding", "chunked");
     res.setHeader("Cache-Control", "no-cache");
     res.flushHeaders();
 
-    const fullReply = await runAIQueryInternal(query, fileText, req);
+    const fullReply = await runAIQueryInternal(query, fileText, { 
+  ...req, 
+  body: { query, fileText, memory } 
+});
 
     const words = String(fullReply).split(" ");
 
@@ -1949,6 +1952,7 @@ async function aiQueryHandler(req, res) {
   try {
     const question = (req.body.query || "").trim();
 const fileText = (req.body.fileText || "").trim();
+   const memory = Array.isArray(req.body.memory) ? req.body.memory : [];
 
     if (!question) {
       return res.json({ reply: "Ask something." });
@@ -2111,18 +2115,30 @@ Behave like a real, experienced APGENCO TM&CAM office assistant, not like a chat
 `;
 
     
+let memoryText = "";
+
+if (memory.length) {
+  memoryText = memory.map(m => {
+    return `${m.role === "assistant" ? "Assistant" : "User"}: ${m.content}`;
+  }).join("\n");
+}
+
 let finalPrompt = `
 ${systemInstruction}
 
-User Question:
+Conversation so far:
+${memoryText || "(no previous conversation)"}
+
+Current User Question:
 ${question}
 
 ${fileText ? "Attached Document Content:\n" + fileText : ""}
 
 Instructions:
-- If the user asks to extract or explain the document, use the attached content.
-- If the user asks to write a letter, summary, or explanation, use the document content.
-- If no document is attached, answer normally.
+- Use the conversation history to understand context.
+- If the user refers to something previously mentioned, use it.
+- Do NOT repeat old answers unless needed.
+- Continue the conversation naturally.
 
 Respond in a clean structured way.
 `;
@@ -2404,6 +2420,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
