@@ -13,7 +13,8 @@ import { createRequire } from "module";
 const require = createRequire(import.meta.url);
 const pdf = require("pdf-parse");
 import Tesseract from "tesseract.js";
-
+import fetch from "node-fetch";
+import * as cheerio from "cheerio";
 
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
@@ -1425,9 +1426,6 @@ const TABLES = {
 };
 
 
-import fetch from "node-fetch";
-import cheerio from "cheerio";
-
 async function webSearch(query) {
   const r = await fetch("https://google.serper.dev/search", {
     method: "POST",
@@ -2590,6 +2588,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
