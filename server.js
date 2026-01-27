@@ -1425,7 +1425,65 @@ const TABLES = {
 };
 
 
+import fetch from "node-fetch";
+import cheerio from "cheerio";
 
+async function webSearch(query) {
+  const r = await fetch("https://google.serper.dev/search", {
+    method: "POST",
+    headers: {
+      "X-API-KEY": process.env.SERPER_API_KEY,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      q: query,
+      num: 5
+    })
+  });
+
+  const data = await r.json();
+  return data.organic || [];
+}
+async function extractPageText(url) {
+  try {
+    const r = await fetch(url, { timeout: 8000 });
+    const html = await r.text();
+
+    const $ = cheerio.load(html);
+    $("script, style, nav, header, footer").remove();
+
+    const text = $("body").text().replace(/\s+/g, " ").trim();
+    return text.slice(0, 8000); // limit size
+  } catch {
+    return "";
+  }
+}
+
+async function wikiSearch(query) {
+  try {
+    const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(query)}`;
+
+    const r = await fetch(url, {
+      headers: { "User-Agent": "TM-CAM-Smart-Assistant" }
+    });
+
+    if (!r.ok) return null;
+
+    const data = await r.json();
+
+    if (!data.extract || data.type === "disambiguation") {
+      return null;
+    }
+
+    return {
+      title: data.title,
+      extract: data.extract,
+      url: data.content_urls?.desktop?.page
+    };
+  } catch {
+    return null;
+  }
+}
 
 app.get("/ai/search/cl", async (req, res) => {
   const q = req.query.q;
@@ -1581,6 +1639,13 @@ if (/^(hi|hello|hey|good morning|good evening)$/.test(t)) {
   if (t.includes("daily")) {
     return { type: "DAILY_LIST", filters };
   }
+// ================= GENERAL PRODUCT / SEARCH =================
+if (
+  /(buy|purchase|find|search|price|cost|available|o[- ]?ring|bearing|motor|pump|valve|seal|spare|part|manual|datasheet|specification)/.test(t)
+) {
+  return { type: "WEB", query: t };
+}
+
 
   // ================= WEB =================
   if (/(who is|capital|minister|pm|cm|price|weather)/.test(t)) {
@@ -2050,6 +2115,18 @@ IDENTITY
 - If user asks "who created you", say:
   "I am TM&CAM Smart Assistant, developed by Tarun for APGENCO TM&CAM Stage-V."
 
+
+If the user asks about:
+- General products
+- Market items
+- Parts
+- Definitions
+- Learning topics
+- Technical concepts
+
+You are allowed to answer like a normal intelligent assistant.
+
+
 ========================
 ROLE & PURPOSE
 ========================
@@ -2194,22 +2271,69 @@ Respond professionally.
     // 🌐 WEB SEARCH
 // ================= WEB SEARCH =================
 if (intent.type === "WEB") {
-  const q = encodeURIComponent(intent.query);
 
-  const url = `https://api.duckduckgo.com/?q=${q}&format=json&no_html=1`;
+  // ===============================
+  // 1️⃣ TRY WIKIPEDIA FIRST
+  // ===============================
+  const wiki = await wikiSearch(intent.query);
 
-  const r = await fetch(url);
-  const data = await r.json();
-
-  if (data.AbstractText) {
+  if (wiki && wiki.extract && wiki.extract.length > 50) {
     return res.json({
-  mode: "web",
-  reply: data.AbstractText
-});
+      mode: "wiki",
+      reply: `📘 From Wikipedia:\n\n${wiki.extract}\n\nSource: ${wiki.url}`
+    });
   }
 
+  // ===============================
+  // 2️⃣ IF NOT IN WIKI → SEARCH WEB
+  // ===============================
+  const results = await webSearch(intent.query);
+
+  if (!results.length) {
+    return res.json({ reply: "No results found on the internet." });
+  }
+
+  let combinedText = "";
+
+  for (const r of results.slice(0, 3)) {
+    const pageText = await extractPageText(r.link);
+    if (pageText) {
+      combinedText += `\n\nSource: ${r.title}\n${pageText}`;
+    }
+  }
+
+  if (!combinedText.trim()) {
+    return res.json({ reply: "Could not extract useful information from websites." });
+  }
+
+  // ===============================
+  // 3️⃣ USE GEMINI ONLY TO SUMMARIZE
+  // ===============================
+  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+  const summarizePrompt = `
+You are a professional technical assistant.
+
+Using ONLY the following website data, answer the user's question.
+
+User question:
+${intent.query}
+
+Website data:
+${combinedText}
+
+Rules:
+- Do not invent information
+- If price is mentioned, give approximate range
+- If specs exist, summarize
+- Use simple, clear language
+`;
+
+  const result = await model.generateContent(summarizePrompt);
+
   return res.json({
-    reply: "I could not find a clear answer on the internet."
+    mode: "web",
+    reply: result.response.text().trim()
   });
 }
 
@@ -2403,6 +2527,7 @@ if (intent.type === "GENERAL") {
 }
 
 
+
     // CL FULL
     if (intent.type === "CL_FULL") {
       const { data, error } = await supabase
@@ -2465,6 +2590,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
