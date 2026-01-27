@@ -1451,7 +1451,7 @@ async function extractPageText(url) {
     $("script, style, nav, header, footer").remove();
 
     const text = $("body").text().replace(/\s+/g, " ").trim();
-    return text.slice(0, 8000); // limit size
+    return text.slice(0, 2000); // limit size
   } catch {
     return "";
   }
@@ -1644,6 +1644,11 @@ if (
   return { type: "WEB", query: t };
 }
 
+if (
+  /(who is|what is|tell me about|about|biography|actor|minister|cm|pm|leader|person)/.test(t)
+) {
+  return { type: "WEB", query: t };
+}
 
   // ================= WEB =================
   if (/(who is|capital|minister|pm|cm|price|weather)/.test(t)) {
@@ -2045,6 +2050,8 @@ app.post("/ai/query-stream", authenticateToken, async (req, res) => {
 
 
 async function aiQueryHandler(req, res) {
+ console.log("🧠 NEW QUESTION:", question);
+
 let summary = "";
 
 if (req.body.conversation_id) {
@@ -2106,7 +2113,8 @@ You are "TM&CAM Smart Assistant".
 ========================
 IDENTITY
 ========================
-- You are a private internal AI assistant developed by Tarun for APGENCO TM&CAM Stage-V.
+- You are a general intelligent assistant with special expertise in APGENCO TM&CAM work.
+- You can answer general knowledge, technical, educational, and public topics normally.
 - Your creator is Tarun.
 - You are NOT Google, NOT Gemini, NOT OpenAI, NOT ChatGPT.
 - You must NEVER mention Google, OpenAI, Gemini, or any external company.
@@ -2276,6 +2284,7 @@ if (intent.type === "WEB") {
   const wiki = await wikiSearch(intent.query);
 
   if (wiki && wiki.extract && wiki.extract.length > 50) {
+  console.log("📘 AI ROUTE: WIKIPEDIA");
     return res.json({
       mode: "wiki",
       reply: `📘 From Wikipedia:\n\n${wiki.extract}\n\nSource: ${wiki.url}`
@@ -2286,6 +2295,8 @@ if (intent.type === "WEB") {
   // 2️⃣ IF NOT IN WIKI → SEARCH WEB
   // ===============================
   const results = await webSearch(intent.query);
+ console.log("🌐 AI ROUTE: WEB SEARCH");
+
 
   if (!results.length) {
     return res.json({ reply: "No results found on the internet." });
@@ -2514,6 +2525,7 @@ if (intent.type === "SUMMARY") {
     }
 // 🤖 GENERAL AI
 if (intent.type === "GENERAL") {
+ console.log("🤖 AI ROUTE: GEMINI (GENERAL AI)");
   const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
   const result = await model.generateContent(finalPrompt);
@@ -2564,10 +2576,11 @@ if (intent.type === "GENERAL") {
     }
 
     // FALLBACK
-    return res.json({
-      mode: "ai",
-      reply: "I can help with PRs, Estimates, Daily progress, and CL data."
-    });
+   return res.json({
+  mode: "ai",
+  reply: "Please ask your question in more detail."
+});
+
 
   } catch (err) {
     console.error("AI QUERY ERROR:", err);
@@ -2588,6 +2601,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
