@@ -2050,7 +2050,8 @@ app.post("/ai/query-stream", authenticateToken, async (req, res) => {
 
 
 async function aiQueryHandler(req, res) {
- console.log("🧠 NEW QUESTION:", question);
+  const question = (req.body.query || "").trim();
+  console.log("🧠 NEW QUESTION:", question);
 
 let summary = "";
 
@@ -2065,7 +2066,7 @@ if (req.body.conversation_id) {
 }
 
   try {
-    const question = (req.body.query || "").trim();
+    
 const fileText = (req.body.fileText || "").trim();
    const memory = Array.isArray(req.body.memory) ? req.body.memory : [];
 
@@ -2601,6 +2602,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
 
 
