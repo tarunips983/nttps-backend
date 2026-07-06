@@ -202,6 +202,17 @@ function mapDailyRow(row) {
     createdAt: row.created_at,
   };
 }
+function mapNoteRow(row) {
+  return {
+    id: row.id,
+    title: row.title,
+    note: row.note,
+    userEmail: row.user_email,
+    userName: row.user_name,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
 
 // =================================================================
 // RECORD ROUTES (use Supabase instead of data.json)
@@ -665,6 +676,145 @@ app.get("/daily-progress/:id", async (req, res) => {
   }
 });
 
+// =====================================================
+// NOTES
+// =====================================================
+
+// Get notes of logged user
+app.get("/notes", authenticateToken, async (req, res) => {
+
+    try{
+
+        const {data,error}=await supabase
+        .from("notes")
+        .select("*")
+        .eq("user_email",req.user.email)
+        .order("updated_at",{ascending:false});
+
+        if(error) throw error;
+
+        res.json(data.map(mapNoteRow));
+
+    }catch(err){
+
+        console.error(err);
+
+        res.status(500).json({
+            error:"Failed to load notes"
+        });
+
+    }
+
+});
+
+
+// Add Note
+app.post("/notes", authenticateToken, async (req,res)=>{
+
+    try{
+
+        const {title,note}=req.body;
+
+        const {data,error}=await supabase
+        .from("notes")
+        .insert({
+            title,
+            note,
+            user_email:req.user.email,
+            user_name:req.user.name
+        })
+        .select();
+
+        if(error) throw error;
+
+        res.json(data[0]);
+
+    }catch(err){
+
+        console.error(err);
+
+        res.status(500).json({
+            error:"Unable to save note"
+        });
+
+    }
+
+});
+
+
+// Update Note
+
+app.put("/notes/:id", authenticateToken, async(req,res)=>{
+
+    try{
+
+        const id=req.params.id;
+
+        const {title,note}=req.body;
+
+        const {data,error}=await supabase
+        .from("notes")
+        .update({
+
+            title,
+            note,
+            updated_at:new Date()
+
+        })
+        .eq("id",id)
+        .eq("user_email",req.user.email)
+        .select();
+
+        if(error) throw error;
+
+        res.json(data[0]);
+
+    }catch(err){
+
+        console.error(err);
+
+        res.status(500).json({
+            error:"Update failed"
+        });
+
+    }
+
+});
+
+
+// Delete
+
+app.delete("/notes/:id", authenticateToken, async(req,res)=>{
+
+    try{
+
+        const id=req.params.id;
+
+        const {error}=await supabase
+        .from("notes")
+        .delete()
+        .eq("id",id)
+        .eq("user_email",req.user.email);
+
+        if(error) throw error;
+
+        res.json({
+            success:true
+        });
+
+    }catch(err){
+
+        console.error(err);
+
+        res.status(500).json({
+            error:"Delete failed"
+        });
+
+    }
+
+});
+
+
 app.post("/page-visit/:page", async (req, res) => {
   try {
     const page = req.params.page.trim();
@@ -921,10 +1071,15 @@ app.post("/login", async (req, res) => {
 
     // 3. Create JWT token ✅
     const token = jwt.sign(
-      { id: user.id, email: user.email },
-      JWT_SECRET,
-      { expiresIn: "8h" }
-    );
+  {
+    id: user.id,
+    email: user.email,
+    name: user.name || user.username || user.email,
+    role: user.role || "user"
+  },
+  JWT_SECRET,
+  { expiresIn: "8h" }
+);
 
     // 4. Send token back to frontend ✅
     return res.json({
