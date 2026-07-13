@@ -15,11 +15,13 @@ const pdf = require("pdf-parse");
 import Tesseract from "tesseract.js";
 import fetch from "node-fetch";
 import * as cheerio from "cheerio";
+import { connectMongo } from "./mongodb.js";
 
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const app = express();
+await connectMongo();
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
